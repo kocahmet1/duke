@@ -185,8 +185,14 @@
     g.fillStyle = '#071014'; g.fillRect(0, 0, c.width, c.height);
     g.strokeStyle = accent; g.lineWidth = 8; g.strokeRect(5, 5, c.width - 10, c.height - 10);
     g.fillStyle = accent; g.fillRect(22, 24, 10, 112);
-    g.font = '900 58px Arial Black, sans-serif'; g.fillText(title, 52, 78);
-    g.font = '700 24px monospace'; g.fillStyle = '#c5d8de'; g.fillText(sub, 54, 119);
+    /* the Turkish lines run longer than the English these plates were laid
+       out for: step a line's size down until it fits instead of letting it
+       run off the plate */
+    var fit = function (txt, weight, px, family) {
+      do { g.font = weight + ' ' + px + 'px ' + family; px--; } while (px > 12 && g.measureText(txt).width > 440);
+    };
+    fit(title, '900', 58, 'Arial Black, sans-serif'); g.fillText(title, 52, 78);
+    fit(sub, '700', 24, 'monospace'); g.fillStyle = '#c5d8de'; g.fillText(sub, 54, 119);
     g.fillStyle = accent; g.fillRect(54, 132, 420, 4);
     var tx = new THREE.CanvasTexture(c);
     if (THREE.sRGBEncoding !== undefined) tx.encoding = THREE.sRGBEncoding;
@@ -199,19 +205,19 @@
   }
 
   function makeSigns() {
-    var s = canvasPanel('BLACKSTAR', 'REACTOR CITADEL // ZERO HOUR', '#50e8ff');
+    var s = canvasPanel('KARAYILDIZ', 'REAKTÖR KALESİ // SIFIR SAATİ', '#50e8ff');
     s.position.set(128, 7.2, 167.9);             /* breach north wall, faces spawn */
 
-    s = canvasPanel('COOLANT', 'WEST LOOP // AUXILIARY ASCENT', '#50e8ff');
+    s = canvasPanel('SOĞUTMA', 'BATI HATTI // YEDEK ÇIKIŞ YOLU', '#50e8ff');
     s.position.set(66.1, 6.4, 128); s.rotation.y = PI * .5;
 
-    s = canvasPanel('TURBINE', 'EAST LOOP // CORE LIFT', '#ff4a2d');
+    s = canvasPanel('TÜRBİN', 'DOĞU HATTI // ÇEKİRDEK ASANSÖRÜ', '#ff4a2d');
     s.position.set(193.9, 7.0, 128); s.rotation.y = -PI * .5;
 
-    s = canvasPanel('COMMAND', 'KEYCARD AUTHORIZATION REQUIRED', '#ff9a3d');
+    s = canvasPanel('KOMUTA', 'ANAHTAR KART YETKİSİ GEREKLİ', '#ff9a3d');
     s.position.set(211.9, 23.4, 34); s.rotation.y = -PI * .5;
 
-    s = canvasPanel('SHUTDOWN', 'BLACKSTAR TERMINATION CONTROL', '#60ff8c');
+    s = canvasPanel('KAPATMA', 'KARAYILDIZ İMHA KONTROLÜ', '#60ff8c');
     s.position.set(68.1, 23.5, 22); s.rotation.y = PI * .5;
   }
 

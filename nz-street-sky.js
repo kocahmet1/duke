@@ -698,9 +698,24 @@
     BRK_AMT = 0.12; BRK_DIM = 0.93;
     var by = 0.2126 * C_BREAK[0] + 0.7152 * C_BREAK[1] + 0.0722 * C_BREAK[2];
     C_BREAK_N = [C_BREAK[0] / by, C_BREAK[1] / by, C_BREAK[2] / by];
-    SKY_WHITE = qk('skywhite', 0.78);
+    /* RE-SOLVED AGAINST THE OWNER'S APRIL 2026 STREET VIEW FRAMES.
+       The photographic-sky pass left this profile at white 0.78 / E(up) 1.15
+       / ev -0.08, and measured in the 233 Sk corridor that put the open
+       carriageway at 95/255 under a 190 sky, the cream siding at 153 and the
+       pavement at 52.  The three reference frames of the same street, same
+       weather, read 150 / 240, 175 and 110: a thin bright overcast, where the
+       ground is a third of the sky and a vertical wall photographs at very
+       nearly its own albedo.  The street was a stop and a half under.
+       So the dome goes back most of the way to the level the module was
+       first calibrated at (E(up) 2.00, white 1.215), stopping short because
+       the visible sky is a photograph now and carries its own cloud shadow:
+           E(up) 1.15 -> 1.66     white 0.78 -> 1.04     ev -0.08 -> +0.18
+       Corridor after: carriageway 131, cream 186, sky 212.  The EV half of
+       the move is deliberate -- it is the only part that also reaches the
+       soldiers and the viewmodel, which the irradiance term never touches. */
+    SKY_WHITE = qk('skywhite', 1.04);
 
-    DAY_IRRADIANCE = qk('dayirr', 1.15);
+    DAY_IRRADIANCE = qk('dayirr', 1.66);
     DAY_DOWN_SHARE = 0.22;
     DAY_DIRECT_KILL = 0.0;
     DAY_IBL_KILL = 0.04;
@@ -721,7 +736,8 @@
     GRADE_CON = qk('con', 1.10); GRADE_CONHI = qk('conhi', 1.04);
     GRADE_GAIN = qk('gain', 1.04); GRADE_SAT = qk('sat', 1.08);
     GRADE_CEIL = qk('ceil', 6.0); GRADE_ON = true;
-    DAY_EV = -0.08;
+    DAY_EV = qk('ev', 0.18);
+    PHOTO_SKY_GAIN = qk('photogain', 2.20);
   }
 
   function prepareMissionProfile() {

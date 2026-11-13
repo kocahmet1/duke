@@ -223,6 +223,34 @@ C.alu = C.steel;                              /* aluminium joinery, same albedo 
    an up-facing 2.00 from the dome. */
 var UPGRIME = [0.150, 0.148, 0.142];
 
+/* ---- MISSION 4 IS OVERCAST AGAIN, AND THE GROUND WAS LEFT IN THE SUN ----
+   The three horizontal albedos above are the SUNNY re-solve: physical
+   bitumen and precast, which is right when an open road takes a 2.45 key
+   undimmed.  The photographic-sky pass put the dome back (NZ.street.SKY
+   .overcast) and changed nothing here, and with no key those albedos are all
+   the ground has.  Measured beside nz-street-ground's 233 Sk carriageway --
+   which was never re-solved for the sun and stands at 137/255 -- 232 Sk came
+   back at 66 and the kilit tasi in front of the pharmacy at 58: a wet night
+   road under a noon sky.  The owner's April 2026 frame of this junction has
+   the asphalt at 126 under a 193 sky and the paving at 132.
+
+   So when the published sky is overcast the ground goes back to COMPENSATED
+   tones, the same kind nz-street-park's own overcast table carries (its road
+   is 0.45): this pipeline hands a horizontal surface roughly 0.38 of its tone
+   on screen, so a road that should photograph at 0.20 needs a tone of 0.5.
+   UPGRIME rises with them, or upTone() would drag the paving straight back
+   down to where it was.  The sunny table is untouched and still wins the
+   moment the sky stops reporting overcast. */
+function overcastGround() {
+  var S = NZ.street && NZ.street.SKY;
+  if (!S || !S.overcast) return false;
+  C.asphalt = [0.500, 0.500, 0.496];
+  C.paver = [0.640, 0.618, 0.578];
+  C.kerb = [0.800, 0.790, 0.762];
+  UPGRIME = [0.330, 0.325, 0.310];
+  return true;
+}
+
 /* Vertical alpha cards need a GAIN or they read as a dark rim: an up-facing
    surface receives 2.00 from the overcast dome and a vertical one about 1.30,
    and the MEASURED orientation discount is 0.76, not the 0.65 the ratio
@@ -1153,16 +1181,20 @@ function signAtlas() {
     put('numara', x0, y0, x0 + w, y0 + h, h);
   })();
 
-  /* --- the green pharmacy cross used by the projecting corner sign. */
+  /* --- the pharmacy emblem used by the projecting corner sign and beside
+     the fascia lettering.  It was a green cross, which is what a pharmacy
+     carries in France or Italy; a Turkish eczane carries a red E on white,
+     and the owner's frame of GUVEN ECZANESI shows exactly that between the
+     two words of its fascia.  The slot keeps its old key so every caller
+     that asks for 'cross' gets the right emblem without being touched. */
   cell = alloc(220, 220);
   (function () {
     var x0 = cell.x0 + SIGN_GUT, y0 = cell.y0 + SIGN_GUT;
     var s = cell.x1 - cell.x0 - SIGN_GUT * 2;
     g.fillStyle = '#f4f3ee'; g.fillRect(x0, y0, s, s);
-    g.fillStyle = '#1f7a46';
-    var t = s * 0.26, o = (s - t) * 0.5, pad = s * 0.10;
-    g.fillRect(x0 + o, y0 + pad, t, s - pad * 2);
-    g.fillRect(x0 + pad, y0 + o, s - pad * 2, t);
+    g.strokeStyle = '#c4222b'; g.lineWidth = s * 0.07;
+    g.strokeRect(x0 + s * 0.075, y0 + s * 0.075, s * 0.85, s * 0.85);
+    fitTextA(g, 'E', '900', s * 0.56, s * 0.56, x0 + s * 0.5, y0 + s * 0.53, '#c4222b', 1);
     put('cross', x0, y0, x0 + s, y0 + s, s);
   })();
 
@@ -1211,6 +1243,66 @@ function signAtlas() {
     }
     g.restore();
     put('hazard', x0, y0, x0 + w, y0 + h, h);
+  })();
+
+  /* --- THE REFUGE'S THREE SIGNS, off the owner's April 2026 frame of the
+     island by the pharmacy.  They sit in the shelf the hazard strip left
+     two thirds empty: 150 + 124 + 160 px against 704 free.
+       aheadleft  the blue mandatory disc, ahead-or-left, white rim
+       refuge     the island-head marker under it: black chevrons pointing UP
+                  on yellow, taller than wide
+       giveway    the inverted triangle the frame shows from behind */
+  cell = alloc(150, 150);
+  (function () {
+    var x0 = cell.x0 + SIGN_GUT, y0 = cell.y0 + SIGN_GUT;
+    var s = cell.x1 - cell.x0 - SIGN_GUT * 2;
+    var cx = x0 + s * 0.5, cy = y0 + s * 0.5, R = s * 0.5;
+    g.fillStyle = '#f2f1ea'; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#1757ab'; g.beginPath(); g.arc(cx, cy, R * 0.93, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#f2f1ea'; g.fillStyle = '#f2f1ea';
+    g.lineCap = 'butt'; g.lineJoin = 'round'; g.lineWidth = R * 0.17;
+    var ax = cx + R * 0.20;
+    g.beginPath(); g.moveTo(ax, cy + R * 0.64); g.lineTo(ax, cy - R * 0.30); g.stroke();
+    g.beginPath(); g.moveTo(ax, cy - R * 0.74); g.lineTo(ax - R * 0.25, cy - R * 0.28);
+    g.lineTo(ax + R * 0.25, cy - R * 0.28); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(ax, cy + R * 0.34);
+    g.quadraticCurveTo(ax, cy - R * 0.02, ax - R * 0.30, cy - R * 0.02);
+    g.lineTo(ax - R * 0.46, cy - R * 0.02); g.stroke();
+    g.beginPath(); g.moveTo(ax - R * 0.86, cy - R * 0.02); g.lineTo(ax - R * 0.44, cy - R * 0.27);
+    g.lineTo(ax - R * 0.44, cy + R * 0.23); g.closePath(); g.fill();
+    put('aheadleft', x0, y0, x0 + s, y0 + s, s);
+  })();
+  cell = alloc(124, 150);
+  (function () {
+    var x0 = cell.x0 + SIGN_GUT, y0 = cell.y0 + SIGN_GUT;
+    var w = cell.x1 - cell.x0 - SIGN_GUT * 2, h = cell.y1 - cell.y0 - SIGN_GUT * 2;
+    g.fillStyle = '#e8b21e'; g.fillRect(x0, y0, w, h);
+    g.save(); g.beginPath(); g.rect(x0, y0, w, h); g.clip();
+    g.fillStyle = '#17150f';
+    var pitch = h / 2.35, th = pitch * 0.50, rise = w * 0.46, i3;
+    for (i3 = 0; i3 < 4; i3++) {
+      var yb = y0 + h + rise * 0.55 - i3 * pitch;
+      g.beginPath();
+      g.moveTo(x0, yb); g.lineTo(x0 + w * 0.5, yb - rise); g.lineTo(x0 + w, yb);
+      g.lineTo(x0 + w, yb - th); g.lineTo(x0 + w * 0.5, yb - rise - th); g.lineTo(x0, yb - th);
+      g.closePath(); g.fill();
+    }
+    g.restore();
+    put('refuge', x0, y0, x0 + w, y0 + h, h);
+  })();
+  cell = alloc(160, 150);
+  (function () {
+    var x0 = cell.x0 + SIGN_GUT, y0 = cell.y0 + SIGN_GUT;
+    var w = cell.x1 - cell.x0 - SIGN_GUT * 2, h = cell.y1 - cell.y0 - SIGN_GUT * 2;
+    function tri(inset, col) {
+      g.fillStyle = col; g.beginPath();
+      g.moveTo(x0 + inset * 1.15, y0 + inset * 0.60);
+      g.lineTo(x0 + w - inset * 1.15, y0 + inset * 0.60);
+      g.lineTo(x0 + w * 0.5, y0 + h - inset * 1.25);
+      g.closePath(); g.fill();
+    }
+    tri(0, '#c4222b'); tri(h * 0.15, '#f4f2ec');
+    put('giveway', x0, y0, x0 + w, y0 + h, h);
   })();
 
   return c;
@@ -1573,6 +1665,11 @@ function decalAtlas() {
    rendered zero pixels and nobody noticed. */
 var NRES = 768, NTS = 256, NGUT = 12;
 var NRECT = [];
+/* cell 8, the reserved one, is the SPRUCE and it is two half cells: the bough
+   in plan (stem left, tip right) over the pendulous spray in elevation (stem
+   along the top, shoots hanging).  Explicit rects, because ncard() takes
+   either a cell index or a rect and these are not a whole cell. */
+var NR_BOUGH = null, NR_HANG = null;
 var N_PINE = 0, N_SPRAY = 1, N_MASS = 2, N_CANDLE = 3;
 var N_GRASS = 4, N_DRY = 5, N_HEDGE = 6, N_SHRUB = 7;
 
@@ -1703,6 +1800,103 @@ function needleAtlas() {
   blades(N_DRY, DRYC, 'rgba(190,183,150,1)', 38, 0.66);
   clumps(N_HEDGE, HLEAF, 'rgba(118,132,100,1)', 46, 14);
   clumps(N_SHRUB, HLEAF, 'rgba(126,140,106,1)', 40, 10);
+
+  /* ---- cell 8: the spruce.  A cooler, bluer green than cells 0-3, at
+     about the same VALUE as they are: like them this cell carries the
+     foliage colour and the vertex tone only trims it.  (Its first drawing
+     was 2.8x darker in linear light, on the argument that a Picea under
+     cloud is the darkest thing on the street.  It is - the refuge tree in
+     the owner's April 2026 frames measures 34,38,29 at its median - but a
+     bough is also looked at from underneath, where the rig hands it a fifth
+     of the sky, and the two together rendered the tree at 12,14,11: a black
+     cut-out.  The darkness belongs in SPRUCE_T, where it can be measured.)
+     THE MIP RULE: an opaque lens under the strokes in both halves.
+     THE GUTTER RULE: NGUT between the halves as well as round the cell. */
+  (function () {
+    var b = box(8), hh = (b.s - NGUT) * 0.5, t, w, u, nx, ny, nl;
+    var A = { x: b.x, y: b.y, w: b.s, h: hh };
+    var B = { x: b.x, y: b.y + hh + NGUT, w: b.s, h: hh };
+    function rectOf(r) {
+      var ins = 3;
+      return [(r.x + ins) / NRES, 1 - (r.y + r.h - ins) / NRES,
+              (r.x + r.w - ins) / NRES, 1 - (r.y + ins) / NRES];
+    }
+    NR_BOUGH = rectOf(A); NR_HANG = rectOf(B);
+    var COL = ['rgba(141,192,144,', 'rgba(112,160,118,', 'rgba(179,234,166,', 'rgba(90,131,99,'];
+    var WOOD = 'rgba(96,80,64,1)';
+    function needle(x0, y0, dx, dy, ci, al) {
+      g.strokeStyle = COL[ci & 3] + al.toFixed(2) + ')';
+      g.lineWidth = 1.25;
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + dx, y0 + dy); g.stroke();
+    }
+
+    /* A: the bough in plan */
+    g.save(); g.beginPath(); g.rect(A.x, A.y, A.w, A.h); g.clip();
+    var cy = A.y + A.h * 0.5;
+    g.fillStyle = 'rgba(93,134,99,1)';
+    g.beginPath(); g.moveTo(A.x + 2, cy);
+    for (k = 0; k <= 16; k++) {
+      t = k / 16;
+      w = A.h * 0.41 * Math.sin(Math.pow(t, 0.55) * Math.PI) * (0.80 + 0.40 * hash(k * 3.7 + 801));
+      g.lineTo(A.x + 2 + (A.w - 6) * t, cy - w);
+    }
+    for (k = 16; k >= 0; k--) {
+      t = k / 16;
+      w = A.h * 0.41 * Math.sin(Math.pow(t, 0.55) * Math.PI) * (0.80 + 0.40 * hash(k * 5.3 + 811));
+      g.lineTo(A.x + 2 + (A.w - 6) * t, cy + w);
+    }
+    g.closePath(); g.fill();
+    g.strokeStyle = WOOD; g.lineWidth = 2.4;
+    g.beginPath(); g.moveTo(A.x + 2, cy); g.lineTo(A.x + A.w * 0.93, cy); g.stroke();
+    for (k = 0; k < 9; k++) {                       /* side shoots, swept forward */
+      var st = 0.07 + k * 0.096, sx = A.x + A.w * st, side = (k & 1) ? 1 : -1;
+      var sl = A.h * (0.44 - 0.25 * st) * (0.80 + 0.40 * hash(k * 2.9 + 821));
+      var ex = sx + sl * 0.95, ey = cy + side * sl * 0.80;
+      g.strokeStyle = 'rgba(86,74,61,0.92)'; g.lineWidth = 1.4;
+      g.beginPath(); g.moveTo(sx, cy); g.lineTo(ex, ey); g.stroke();
+      for (j = 0; j < 22; j++) {
+        u = j / 22; nl = 3.0 + 3.2 * hash(k * 31 + j * 7 + 831);
+        needle(sx + (ex - sx) * u, cy + (ey - cy) * u, nl * 0.75, ((j & 1) ? nl : -nl) * 0.8,
+               k + j, 0.70 + 0.30 * hash(j * 3.1 + k));
+      }
+    }
+    for (j = 0; j < 150; j++) {                     /* needles on the leader itself */
+      u = Math.pow(hash(j * 1.7 + 841), 0.8); nl = 3 + 4 * hash(j * 2.3 + 851);
+      nx = A.x + 2 + A.w * 0.92 * u;
+      ny = cy + (hash(j * 4.1 + 861) - 0.5) * A.h * 0.62 * Math.sin(Math.pow(u, 0.55) * Math.PI);
+      needle(nx, ny, nl * 0.8, (hash(j * 6.7 + 881) - 0.5) * nl * 1.6, j, 0.60 + 0.40 * hash(j * 5.9 + 871));
+    }
+    g.restore();
+
+    /* B: the pendulous spray in elevation */
+    g.save(); g.beginPath(); g.rect(B.x, B.y, B.w, B.h); g.clip();
+    var ty = B.y + B.h * 0.15;
+    g.fillStyle = 'rgba(86,128,96,1)';
+    g.beginPath(); g.moveTo(B.x + 2, ty - B.h * 0.10);
+    g.lineTo(B.x + B.w - 4, ty - B.h * 0.03);
+    for (k = 14; k >= 0; k--) {
+      t = k / 14;
+      var dep = B.h * (0.26 + 0.52 * Math.sin(Math.pow(t, 0.7) * Math.PI) * (0.60 + 0.40 * hash(k * 7.1 + 901)));
+      g.lineTo(B.x + 2 + (B.w - 6) * t, ty + dep);
+    }
+    g.closePath(); g.fill();
+    g.strokeStyle = WOOD; g.lineWidth = 2.4;
+    g.beginPath(); g.moveTo(B.x + 2, ty); g.lineTo(B.x + B.w * 0.95, ty + B.h * 0.05); g.stroke();
+    for (k = 0; k < 15; k++) {
+      var hx = B.x + B.w * (0.05 + k * 0.062);
+      var hl = B.h * (0.34 + 0.44 * hash(k * 4.3 + 911)) * (0.60 + 0.40 * Math.sin((k / 14) * Math.PI));
+      var sway = (hash(k * 8.9 + 921) - 0.5) * 10;
+      g.strokeStyle = 'rgba(83,70,58,0.92)'; g.lineWidth = 1.3;
+      g.beginPath(); g.moveTo(hx, ty);
+      g.quadraticCurveTo(hx + sway * 0.3, ty + hl * 0.5, hx + sway, ty + hl); g.stroke();
+      for (j = 0; j < 16; j++) {
+        u = j / 16; nl = 3 + 3 * hash(k * 13 + j * 5 + 931);
+        needle(hx + sway * u * u, ty + hl * u, (j & 1) ? nl : -nl, nl * 0.7,
+               k + j, 0.65 + 0.35 * hash(j * 2.7 + k * 3));
+      }
+    }
+    g.restore();
+  })();
   return c;
 }
 
@@ -1817,6 +2011,35 @@ function ncard(pile, rect, cx, cy, cz, ux, uy, uz, vx, vy, vz, tone) {
   var r = (typeof rect === 'number') ? NRECT[rect] : rect;
   if (!r || r.length !== 4) { warn('ncard: bad rect ' + rect); return; }
   atlasCard(pile, r, cx, cy, cz, ux, uy, uz, vx, vy, vz, 1, tone);
+}
+/* ncardN(pile, rect, cx,cy,cz, ux,uy,uz, vx,vy,vz, nx,ny,nz, tone, flipV)
+   ncard with the STORED normal given instead of derived from u x v.
+   A near-horizontal card of foliage lit as the plane it is drawn on comes
+   out wrong twice over: its top takes the whole sky and its underside only
+   what the road bounces back (0.18 against 1.4 in the overcast rig), so one
+   bough is seven times brighter from above than from the pavement.  A real
+   spray is a volume of needles pointing every way and is never that far
+   apart on its two sides.  Giving the card a normal that leans OUT of the
+   crown rather than straight up puts both of its faces near the horizon's
+   irradiance, and sends its bake rays where a branch tip actually looks.
+   The triangles are wound so the front face is the one the normal leaves by
+   (DoubleSide turns the normal over for the other); flipV mirrors the
+   texture across the card WITHOUT turning either of them. */
+function ncardN(pile, rect, cx, cy, cz, ux, uy, uz, vx, vy, vz, nx, ny, nz, tone, flipV) {
+  var r = (typeof rect === 'number') ? NRECT[rect] : rect;
+  if (!r || r.length !== 4) { warn('ncardN: bad rect ' + rect); return; }
+  var l = Math.sqrt(nx * nx + ny * ny + nz * nz);
+  if (!(l > 1e-9)) { atlasCard(pile, r, cx, cy, cz, ux, uy, uz, vx, vy, vz, 1, tone); return; }
+  nx /= l; ny /= l; nz /= l;
+  var v0 = flipV ? r[3] : r[1], v1 = flipV ? r[1] : r[3];
+  var gx = uy * vz - uz * vy, gy = uz * vx - ux * vz, gz = ux * vy - uy * vx;
+  var b = pile.n;
+  pile.vert(cx - ux - vx, cy - uy - vy, cz - uz - vz, nx, ny, nz, r[0], v0, 1, tone);
+  pile.vert(cx + ux - vx, cy + uy - vy, cz + uz - vz, nx, ny, nz, r[2], v0, 1, tone);
+  pile.vert(cx + ux + vx, cy + uy + vy, cz + uz + vz, nx, ny, nz, r[2], v1, 1, tone);
+  pile.vert(cx - ux + vx, cy - uy + vy, cz - uz + vz, nx, ny, nz, r[0], v1, 1, tone);
+  if (gx * nx + gy * ny + gz * nz >= 0) { pile.tri(b, b + 1, b + 2); pile.tri(b, b + 2, b + 3); }
+  else { pile.tri(b, b + 2, b + 1); pile.tri(b, b + 3, b + 2); }
 }
 /* two crossed cards standing on (x,y,z), w wide and h tall, yawed by rot */
 function ncross(pile, rect, x, y, z, w, h, rot, tone) {
@@ -2383,6 +2606,7 @@ function install(ctx) {
       MAX_ANISO = Math.min(8, renderer.capabilities.getMaxAnisotropy() || 4);
   } catch (e) { MAX_ANISO = 4; }
 
+  overcastGround();
   initPiles();
   buildAll();
   meshAll();
@@ -5893,38 +6117,243 @@ function grKerbWeeds(z0, z1, seed, road0, road1) {
   }
 }
 
-/* The small splitter at the mouth of the downhill arm is independent from
-   nz-street-ground's large tree island in 233 Sk.  Its broad north edge and
-   pointed south nose reproduce the little triangular refuge visible between
-   the two islands in the street-view reference. */
-function buildNorthSplitterIsland() {
-  var top = 0.76, soil = 0.80, base = ROAD_TOP - 0.04;
-  var outer = [[513.60, top, 143.80], [527.40, top, 143.80],
-               [520.50, top, 160.20]];
-  var cx = 520.50, cz = (143.80 + 143.80 + 160.20) / 3;
-  var ref = [cx, (base + top) * 0.5, cz], i;
-  var kerbTone = upTone(mix(C.kerb, C.stone, 0.10));
+/* -----------------------------------------------------------------------
+   8.4b  THE REFUGE BY THE PHARMACY, AND ITS SPRUCE
 
-  /* Top and three exposed kerb faces. */
-  poly(P.stone, outer, [cx, base - 1, cz], 1, kerbTone);
-  for (i = 0; i < 3; i++) {
-    var a = outer[i], b = outer[(i + 1) % 3];
-    poly(P.stone, [[a[0], base, a[2]], [b[0], base, b[2]], b, a],
-         ref, 0.82, mix(C.kerb, C.dark, 0.15));
+   The owner's April 2026 frame of this corner, and the August 2015 one of
+   the same spot, are both of ONE thing: the little triangular refuge in
+   front of GUVEN ECZANESI and the spruce that stands in it -- a sapling in
+   a kerbed lawn in 2015, a thirteen-metre tree in a bed of dry earth now,
+   with a blue ahead-or-left disc and an island-head chevron board on a post
+   at its nose and the back of a give-way triangle beside it.
+
+   What was here was a kerbed triangle laid at y 0..0.76 and a 4.3 m black
+   pine.  The triangle was never visible: this ground is nz-street-park's
+   north footway, which climbs west at seven per cent and stands 2.5 units
+   above the arm at this x, so the whole island was buried under somebody
+   else's paving and only the top of the pine came through it.
+
+   So the refuge is built ON the footway it actually stands on: every height
+   below is taken from the park's own grade, the bed covers the three cells
+   NUKEM.html blocks for it (128/36, 129/36, 130/37), and both posts and the
+   stem stand inside those cells -- rule C, as before.
+   -------------------------------------------------------------------- */
+
+/* the park footway's surface under a point: its grade plus the paving deck */
+function refugePave(x, z) {
+  var PK = NZ.streetPark, gy = NaN;
+  try { if (PK && typeof PK.gradeAt === 'function') gy = PK.gradeAt(x, z); } catch (e) { gy = NaN; }
+  if (!isFinite(gy)) gy = clamp((552 - x) * 0.07, 0, 20.16);
+  return gy + 0.55;
+}
+
+/* A Picea under cloud: the boughs, the hanging sprays and the interior.
+   Calibrated in our own frame against the refuge tree of the two April 2026
+   photographs -- the numbers are in the note at the call.  SPRUCE_NY is how
+   far a bough's stored normal leans up off the horizontal; see ncardN(). */
+var SPRUCE_T = [1.03, 0.59, 0.79];
+var SPRUCE_H = [1.55, 0.89, 1.18];
+var SPRUCE_MASS = [0.45, 0.375, 0.48];
+var SPRUCE_NY = 0.35;
+
+/* spruce(x, z, y, h, r, cb, seed, yMin)
+   The FORM comes from nz-street-props (NZ.streetFlora.spruce), so this tree
+   and the row along A-BLOK are one species; this module supplies the stem,
+   the atlas and the tone.  yMin is the pruning line: no card hangs below it.
+   Returns false, having built nothing, if the form is not there to call. */
+function spruce(x, z, y, h, r, cb, seed, yMin) {
+  var F = NZ.streetFlora && NZ.streetFlora.spruce;
+  if (typeof F !== 'function' || !NR_BOUGH || !NR_HANG) return false;
+  var i, TAU = Math.PI * 2;
+  var leanX = rr(seed, 1, -0.55, 0.55), leanZ = rr(seed, 2, -0.45, 0.45);
+  function stemAt(yy) {
+    var q = clamp((yy - y) / h, 0, 1);
+    return [x + leanX * q * q, yy, z + leanZ * q * q];
+  }
+  /* 380 mm through at the foot, which is what the photograph's stem is
+     against the 76 mm sign post beside it */
+  var trunkR = m(0.19), bark = mix(C.trunk, C.dark, 0.26), n = 7;
+  for (i = 0; i < n; i++) {
+    var q0 = i / n, q1 = (i + 1) / n;
+    var a = stemAt(y + h * 0.96 * q0), b = stemAt(y + h * 0.96 * q1);
+    grFrustum(P.render, a[0], a[1], a[2], b[0], b[1], b[2],
+              trunkR * (1 - 0.90 * Math.pow(q0, 1.15)) + 0.03,
+              trunkR * (1 - 0.90 * Math.pow(q1, 1.15)) + 0.03, 8, 1, bark, false, false);
+  }
+  for (i = 0; i < 5; i++) {                        /* the root flare */
+    var fa = i / 5 * TAU + rr(seed, 8 + i, -0.4, 0.4), fl = rr(seed, 14 + i, 0.9, 1.5);
+    grFrustum(P.render, x, y + fl * 1.3, z, x + Math.cos(fa) * fl, y - 0.08, z + Math.sin(fa) * fl,
+              trunkR * 0.34, trunkR * 0.56, 5, 1, mix(bark, C.dark, 0.30), false, false);
+  }
+  for (i = 0; i < 9; i++) {                        /* the spurs of lost branches */
+    var sy = y + lerp(h * 0.07, cb - 0.5, i / 8) + rr(seed, 20 + i, -0.3, 0.3);
+    var sa = rr(seed, 30 + i, 0, TAU), sl = rr(seed, 40 + i, 0.5, 1.2), sp = stemAt(sy);
+    grFrustum(P.render, sp[0], sy, sp[2], sp[0] + Math.cos(sa) * sl, sy - 0.18, sp[2] + Math.sin(sa) * sl,
+              0.075, 0.035, 4, 1, mix(bark, C.dark, 0.34), false, true);
   }
 
-  /* Pull the soil toward the centroid to leave a consistent pale border. */
-  var inner = [];
-  for (i = 0; i < outer.length; i++)
-    inner.push([lerp(outer[i][0], cx, 0.16), soil,
-                lerp(outer[i][2], cz, 0.16)]);
-  poly(P.render, inner, [cx, base - 1, cz], 1,
-       upTone(mix(C.soil, C.green, 0.13)));
+  var cards = F({ x: x, y: y, z: z, h: h, cb: cb, r: r, seed: seed, dens: 1, axis: stemAt });
+  for (i = 0; i < cards.length; i++) {
+    var c = cards[i], k = c[10], cy = c[2];
+    var low = cy - Math.abs(c[5]) - Math.abs(c[8]);
+    if (yMin !== undefined && low < yMin) cy += yMin - low;
+    if (c[0] === 0) {
+      /* a bough: its normal leans out of the crown, away from the stem at
+         its own height.  Every other one is laid mirrored, so two neighbours
+         never show the same side shoots in the same order. */
+      var sc = stemAt(cy), ox = c[1] - sc[0], oz = c[3] - sc[2];
+      var ol = Math.sqrt(ox * ox + oz * oz);
+      if (ol < 0.05) { ox = c[4]; oz = c[6]; ol = Math.sqrt(ox * ox + oz * oz) || 1; }
+      ncardN(P.needle, NR_BOUGH, c[1], cy, c[3], c[4], c[5], c[6], c[7], c[8], c[9],
+             ox / ol, SPRUCE_NY, oz / ol,
+             [SPRUCE_T[0] * k, SPRUCE_T[1] * k, SPRUCE_T[2] * k], (i & 2) !== 0);
+      continue;
+    }
+    var rect = c[0] === 2 ? NRECT[N_MASS] : (c[0] === 1 ? NR_HANG : NR_BOUGH);
+    var tn = c[0] === 2 ? SPRUCE_MASS : SPRUCE_H;
+    ncard(P.needle, rect, c[1], cy, c[3], c[4], c[5], c[6],
+          c[7], c[8], c[9], [tn[0] * k, tn[1] * k, tn[2] * k]);
+  }
+  /* ONE occluder, inset well inside the skirt: the crown is 24 units of
+     shade over a footway and a road, and without it they bake as if the
+     tree were not there.  Inset, because a box that touches a card's own
+     vertices bakes the card black. */
+  grOcc(x - r * 0.46, y + cb + 1.6, z - r * 0.46, x + r * 0.46, y + cb + 1.6 + 23.0, z + r * 0.46);
+  STATS.trees++;
+  return true;
+}
 
-  /* A deliberately smaller tree than the mature cedar on the main island. */
-  conifer(520.45, 148.90, soil - 0.03, 15.2, 3.15);
-  grOcc(519.90, soil, 148.35, 521.00, soil + 5.9, 149.45);
+/* one sign on a post: the face, and the grey back of its plate, which is the
+   side half of all road signs are seen from.  f is the direction it faces. */
+function refugeSign(slot, px, py, pz, fx, fz, size, shape) {
+  var fl = Math.sqrt(fx * fx + fz * fz) || 1; fx /= fl; fz /= fl;
+  var ux = fz, uz = -fx;                            /* the plate's own width axis */
+  var sz2 = signCard(P.sign, slot, px + fx * 0.14, py, pz + fz * 0.14,
+                     ux, 0, uz, 0, 1, 0, size, C.white, [fx, 0, fz]);
+  if (!sz2) return;
+  var hw = sz2.w * 0.5, hh = sz2.h * 0.5, pts = [], i;
+  var bx = px + fx * 0.11, bz = pz + fz * 0.11;
+  if (shape === 'disc') {
+    for (i = 0; i < 14; i++) {
+      var q = i / 14 * Math.PI * 2;
+      pts.push([bx + ux * Math.cos(q) * hw, py + Math.sin(q) * hh, bz + uz * Math.cos(q) * hw]);
+    }
+  } else if (shape === 'tri') {
+    pts = [[bx - ux * hw, py + hh, bz - uz * hw], [bx + ux * hw, py + hh, bz + uz * hw], [bx, py - hh, bz]];
+  } else {
+    pts = [[bx - ux * hw, py - hh, bz - uz * hw], [bx + ux * hw, py - hh, bz + uz * hw],
+           [bx + ux * hw, py + hh, bz + uz * hw], [bx - ux * hw, py + hh, bz - uz * hw]];
+  }
+  /* ref on the FACE side, so the plate's normal points out of its back */
+  poly(P.metal, pts, [bx + fx, py, bz + fz], 1, mix(C.steel, C.dark, 0.16));
+}
+
+function buildNorthSplitterIsland() {
+  var Q = [[512.6, 144.5], [520.8, 144.5], [523.7, 151.7], [515.4, 148.6]];
+  var n = Q.length, i, cx = 0, cz = 0;
+  for (i = 0; i < n; i++) { cx += Q[i][0] / n; cz += Q[i][1] / n; }
+  var S = NZ.street && NZ.street.SKY, cloud = !!(S && S.overcast);
+  var KH = 0.34, KW = 0.52;
+  var inner = [];
+  for (i = 0; i < n; i++) {
+    var dx = cx - Q[i][0], dz = cz - Q[i][1], dl = Math.sqrt(dx * dx + dz * dz) || 1;
+    inner.push([Q[i][0] + dx / dl * KW * 1.5, Q[i][1] + dz / dl * KW * 1.5]);
+  }
+  /* the kerb: an outer face, a top and an inner face per side, each on the
+     footway's own grade so the ring follows the hill instead of cutting it */
+  var kerbTop = upTone(mix(C.kerb, C.stone, 0.20));
+  for (i = 0; i < n; i++) {
+    var a = Q[i], b = Q[(i + 1) % n], ia = inner[i], ib = inner[(i + 1) % n];
+    var ya = refugePave(a[0], a[1]), yb = refugePave(b[0], b[1]);
+    var yia = refugePave(ia[0], ia[1]), yib = refugePave(ib[0], ib[1]);
+    var ref = [(a[0] + b[0] + ia[0] + ib[0]) * 0.25, (ya + yb) * 0.5 + KH * 0.4,
+               (a[1] + b[1] + ia[1] + ib[1]) * 0.25];
+    poly(P.stone, [[a[0], ya - 0.05, a[1]], [b[0], yb - 0.05, b[1]],
+                   [b[0], yb + KH, b[1]], [a[0], ya + KH, a[1]]],
+         ref, 0.86, mix(C.kerb, C.dark, 0.18));
+    poly(P.stone, [[a[0], ya + KH, a[1]], [b[0], yb + KH, b[1]],
+                   [ib[0], yib + KH, ib[1]], [ia[0], yia + KH, ia[1]]],
+         [ref[0], ref[1] - 2, ref[2]], 1, kerbTop);
+    poly(P.stone, [[ia[0], yia + 0.10, ia[1]], [ib[0], yib + 0.10, ib[1]],
+                   [ib[0], yib + KH, ib[1]], [ia[0], yia + KH, ia[1]]],
+         ref, 0.78, mix(C.kerb, C.dark, 0.30));
+    STATS.kerbs++;
+  }
+  /* the bed: dry earth, not lawn -- that is the 2026 frame, and it is also
+     what is under any street spruce that has shed for ten years */
+  var soil = cloud ? [0.360, 0.290, 0.185] : mix(C.soil, C.green, 0.13);
+  var bed = [];
+  for (i = 0; i < n; i++)
+    bed.push([inner[i][0], refugePave(inner[i][0], inner[i][1]) + 0.17, inner[i][1]]);
+  poly(P.render, bed, [cx, refugePave(cx, cz) - 1, cz], 0.90, soil);
+  /* straw and a little green, thickest along the kerb where the water sits */
+  var straw = cloud ? [0.56, 0.48, 0.30] : mix(C.gold, C.white, 0.45);
+  for (i = 0; i < 16; i++) {
+    var e = i % n, f = rr(771 + i, 3, 0.08, 0.92), g = rr(771 + i, 5, 0.10, 0.62);
+    var ex = lerp(inner[e][0], inner[(e + 1) % n][0], f), ez = lerp(inner[e][1], inner[(e + 1) % n][1], f);
+    var wx = lerp(ex, cx, g), wz = lerp(ez, cz, g);
+    var wh = rr(771 + i, 7, 0.55, 1.25), green = rr(771 + i, 9, 0, 1) < 0.30;
+    var t = green ? mix(C.needle, C.needleD, rr(771 + i, 11, 0.2, 0.8)) : straw;
+    var gk = (green ? CARD_GAIN : DRY_CARD) * rr(771 + i, 13, 0.82, 1.12);
+    ncross(P.needle, green ? N_GRASS : N_DRY, wx, refugePave(wx, wz) + 0.17, wz,
+           wh * 1.5, wh, rr(771 + i, 15, 0, Math.PI), [t[0] * gk, t[1] * gk, t[2] * gk * 0.97]);
+  }
+
+  /* THE SPRUCE.  13.7 m with 2.8 m of clear stem and a 3.5 m skirt: off the
+     two April 2026 frames, where its head stands level with the pharmacy
+     block's eaves, its lowest boughs just clear the top of the sign post and
+     its skirt is as wide as two parked cars are long.
+     The pruning line is the footway's own jumpTop -- rule B.
+     TONE, measured over the crown from the photographs' own standpoint
+     (552, 6, 176), luminance percentiles 5/10/25/50/75 and the colour at
+     the median:
+         photographs   11-15 / 16-19 / 24-27 / 36-40 / 54-60    34-38, 38-43, 29-35
+         this build       23 /    25 /    29 /    36 /    46    33, 39, 29
+     The median and the hue are on; the range is still narrower than a real
+     crown's, which has holes through to the sky that these cards do not. */
+  var tx = 520.45, tz = 148.90, ty = refugePave(tx, tz) + 0.15;
+  var built = spruce(tx, tz, ty, 48.0, 12.4, 9.8, 5213, ty + 8.75);
+  if (!built) {
+    /* nz-street-props did not load: the old pine, on the right ground */
+    conifer(tx, tz, ty, 15.2, 3.15);
+    grOcc(tx - 0.55, ty, tz - 0.55, tx + 0.55, ty + 5.9, tz + 0.55);
+  }
+
+  /* THE POST AT THE NOSE: blue ahead-or-left over the island-head chevrons,
+     facing the roundabout the way the frame shows them facing its camera.
+     x 522.9 / z 150.7 is inside cell 130/37. */
+  var steel = mix(C.steel, C.dark, 0.20);
+  var sx = 522.9, sz = 150.7, sy = refugePave(sx, sz) + 0.17;
+  grFrustum(P.metal, sx, sy, sz, sx, sy + 9.9, sz, 0.108, 0.108, 7, 1, steel, false, true);
+  refugeSign('aheadleft', sx, sy + 8.55, sz, 0.90, 0.44, 2.12, 'disc');
+  refugeSign('refuge', sx, sy + 5.75, sz, 0.90, 0.44, 2.86, 'rect');
+  /* ...and the give-way that faces the traffic coming down the arm, which
+     is why the frame only ever shows its back.  Cell 128/36. */
+  var gx = 513.7, gz = 145.4, gy = refugePave(gx, gz) + 0.17;
+  grFrustum(P.metal, gx, gy, gz, gx, gy + 9.2, gz, 0.108, 0.108, 7, 1, steel, false, true);
+  refugeSign('giveway', gx, gy + 8.0, gz, -0.26, -0.97, 2.36, 'tri');
+  STATS.signs += 3;
   STATS.pits = (STATS.pits || 0) + 1;
+}
+
+
+/* the solid white edge line the April 2026 frame shows down both kerbs of
+   the freshly surfaced arm.  120 mm wide, 0.55 m off the kerb face, laid in
+   14 u lengths so each can carry its own wear and the line is not one
+   perfect ribbon; flat single quads on P.mark at +0.033, like roadMarks(). */
+function edgeLines(xL, xR, z0, z1, seed) {
+  var w = m(0.12), off = m(0.55), step = 14.0, z, i = 0;
+  for (z = z0; z < z1 - 0.5; z += step, i++) {
+    var ze = Math.min(z + step - 0.10, z1), k;
+    for (k = 0; k < 2; k++) {
+      var x = k ? xR - off : xL + off;
+      var wear = rr(seed + i, 3 + k, 0.06, 0.30);
+      if (rr(seed + i, 9 + k, 0, 1) < 0.07) continue;       /* a length worn right out */
+      grFlat(P.mark, x - w * 0.5, z, x + w * 0.5, ze, ROAD_TOP + 0.033, 1,
+             mix(C.line, C.asphalt, wear));
+      STATS.marks++;
+    }
+  }
 }
 
 
@@ -5958,6 +6387,7 @@ function buildGround() {
   kerbRun(NORTH_ROAD0, -1, -150.0, 152.0, 311);
   kerbRun(NORTH_ROAD1, 1, -150.0, 152.0, 337);
   roadMarks(-144.0, 144.0, (NORTH_ROAD0 + NORTH_ROAD1) * 0.5, 41);
+  edgeLines(NORTH_ROAD0, NORTH_ROAD1, -144.0, 142.5, 149);
   grManholes(-130.0, 142.0, (NORTH_ROAD0 + NORTH_ROAD1) * 0.5, 53);
   grKerbWeeds(-142.0, 150.0, 67, NORTH_ROAD0, NORTH_ROAD1);
 

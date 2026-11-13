@@ -336,7 +336,7 @@
     if (VIEW.third !== on) {
       VIEW.third = on;
       try { global.localStorage.setItem(VIEW_KEY, on ? 'third' : 'first'); } catch (e) { }
-      if (announce && G.message && G.state && G.state.playing) G.message(on ? 'THIRD PERSON' : 'FIRST PERSON');
+      if (announce && G.message && G.state && G.state.playing) G.message(on ? 'ÜÇÜNCÜ ŞAHIS' : 'BİRİNCİ ŞAHIS');
     }
     refreshUI();
   }
@@ -354,12 +354,12 @@
       var g = doc.createElement('div');
       g.id = 'views';
       g.setAttribute('role', 'radiogroup');
-      g.setAttribute('aria-label', 'Camera view');
+      g.setAttribute('aria-label', 'Kamera görünümü');
       /* one short row, not a third deck of cards: the title screen is already
          as tall as a 540-pixel window allows */
       g.style.cssText = 'display:flex;align-items:center;gap:clamp(6px,.7vw,14px);margin-top:1.1vh;flex-wrap:wrap;justify-content:center';
       var lab = doc.createElement('span');
-      lab.textContent = 'VIEW';
+      lab.textContent = 'GÖRÜNÜM';
       lab.style.cssText = 'font-size:clamp(9px,1.25vh,13px);letter-spacing:.22em;opacity:.62';
       g.appendChild(lab);
       var mk = function (name, tip, on) {
@@ -376,8 +376,8 @@
         g.appendChild(b);
         return b;
       };
-      ui.first = mk('FIRST PERSON', 'Through the sights, as the game has always played', false);
-      ui.third = mk('THIRD PERSON', 'Over the shoulder, with your figure in frame. V switches at any time', true);
+      ui.first = mk('BİRİNCİ ŞAHIS', 'Nişangâhtan bakarak, oyunun hep oynandığı gibi', false);
+      ui.third = mk('ÜÇÜNCÜ ŞAHIS', 'Omuz üstünden, karakterin kadrajda. V ile istediğin an geçiş yaparsın', true);
       var anchor = doc.getElementById('skilltag');
       if (anchor && anchor.parentNode === title) title.insertBefore(g, anchor.nextSibling);
       else title.appendChild(g);
@@ -387,7 +387,7 @@
       var p = brief && brief.parentNode;
       if (p) {
         var hint = doc.createElement('span');
-        hint.innerHTML = ' &nbsp;&bull;&nbsp; <span class="keyhint">V</span> first / third person';
+        hint.innerHTML = ' &nbsp;&bull;&nbsp; <span class="keyhint">V</span>&nbsp;birinci&nbsp;/&nbsp;üçüncü&nbsp;şahıs';
         /* after the "ESC pause" entry: the last text before the blank line */
         var brs = p.getElementsByTagName('br');
         var at = brs.length >= 3 ? brs[brs.length - 3] : null;
@@ -414,7 +414,7 @@
       ui.third.disabled = !NZ.flags.hero || DEAD;
     }
     if (ui.pause) {
-      ui.pause.textContent = VIEW.third ? 'VIEW: THIRD PERSON' : 'VIEW: FIRST PERSON';
+      ui.pause.textContent = VIEW.third ? 'GÖRÜNÜM: ÜÇÜNCÜ ŞAHIS' : 'GÖRÜNÜM: BİRİNCİ ŞAHIS';
       ui.pause.disabled = !NZ.flags.hero || DEAD;
     }
   }
@@ -905,7 +905,7 @@
     try { SHOW.az = showcaseHeading(); } catch (e) { SHOW.az = 0; }
     if (!inspectGet()) { inspectSet(true); SHOW.inspectSet = true; }
     showcaseClass(true);
-    if (G.message) G.message('SHOWCASE \u2022 WHEEL ZOOMS \u2022 MOUSE TURNS \u2022 U RETURNS');
+    if (G.message) G.message('VİTRİN MODU \u2022 TEKERLEK: YAKINLAŞ \u2022 FARE: ÇEVİR \u2022 U: GERİ DÖN');
     return true;
   }
   function showcaseOff() {

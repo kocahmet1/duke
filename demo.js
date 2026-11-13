@@ -386,8 +386,8 @@
     var bw = 9.2 * u;
     var w = WPN[player.weapon];
     var cells = [
-      { l: 'HEALTH', v: String(Math.ceil(player.hp)), c: player.hp <= 30 ? '#ff4020' : '#f0c83a' },
-      { l: 'AMMO', v: String(player.ammo[w.ammo]), c: '#f0c83a' },
+      { l: 'SAĞLIK', v: String(Math.ceil(player.hp)), c: player.hp <= 30 ? '#ff4020' : '#f0c83a' },
+      { l: 'MERMİ', v: String(player.ammo[w.ammo]), c: '#f0c83a' },
       { l: w.name, v: player.medpack > 0 ? player.medpack + '%' : '--', c: '#f0c83a' }
     ];
     g.textBaseline = 'alphabetic';
@@ -402,7 +402,7 @@
     /* T / K / S block */
     g.textAlign = 'left';
     var sy = by - 2.2 * u, ss = 2.05 * u;
-    var rows = [['T:', fmt(player.time)], ['K:', player.kills + '/' + totalKills], ['S:', player.secrets + '/8']];
+    var rows = [['S:', fmt(player.time)], ['L:', player.kills + '/' + totalKills], ['G:', player.secrets + '/8']];
     for (var r = rows.length - 1; r >= 0; r--) {
       var yy = sy - (rows.length - 1 - r) * ss * 1.16;
       label(g, rows[r][0], bx, yy, Math.round(ss), '#d03a2a');
@@ -422,8 +422,8 @@
       g.font = '700 ' + Math.round(2.35 * u) + 'px ' + FONT;
       g.save();
       g.shadowColor = '#2b5bbf'; g.shadowBlur = 12;
-      g.fillStyle = '#000'; g.fillText(m.textContent.toUpperCase(), W / 2 + 2, 4.6 * u + 2);
-      g.fillStyle = '#8fb8ff'; g.fillText(m.textContent.toUpperCase(), W / 2, 4.6 * u);
+      g.fillStyle = '#000'; g.fillText(m.textContent.toLocaleUpperCase('tr-TR'), W / 2 + 2, 4.6 * u + 2);
+      g.fillStyle = '#8fb8ff'; g.fillText(m.textContent.toLocaleUpperCase('tr-TR'), W / 2, 4.6 * u);
       g.restore();
     }
     var sub = document.getElementById('subtitle');
@@ -519,7 +519,7 @@
     rec.start(250);
     startGame();
     rawRAF(post);
-    hint('REC  ' + CFG.W + 'x' + CFG.H + '  ' + CFG.speed.toFixed(1) + 'x  ' + CFG.len + 's');
+    hint('KAYIT  ' + CFG.W + 'x' + CFG.H + '  ' + CFG.speed.toFixed(1) + 'x  ' + CFG.len + 's');
   }
 
   function stop() {
@@ -538,7 +538,7 @@
     var ext = type.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
     var blob = new Blob(chunks, { type: type.split(';')[0] });
     blobUrl = URL.createObjectURL(blob);
-    var name = 'nukezone3d-' + CFG.W + 'x' + CFG.H + '.' + ext;
+    var name = 'seydisehir-catisma-' + CFG.W + 'x' + CFG.H + '.' + ext;
 
     if (CFG.save) {
       var a = document.createElement('a');
@@ -567,22 +567,22 @@
       'font-family:' + FONT + ';color:#f0c83a;text-align:center;padding:24px';
     var warn = ext === 'mp4' ? '' :
       '<div style="color:#d94b4b;font-size:13px;max-width:52ch;line-height:1.7">' +
-      'Your browser recorded WebM. Twitter/X only accepts MP4 &mdash; run it through ' +
-      'any converter (or CloudConvert) before uploading. Chrome on desktop usually ' +
-      'gives you MP4 directly.</div>';
+      'Tarayıcın WebM olarak kaydetti. Twitter/X yalnızca MP4 kabul ediyor &mdash; yüklemeden önce ' +
+      'herhangi bir dönüştürücüden (ya da CloudConvert ile) geçir. Masaüstündeki Chrome genelde ' +
+      'doğrudan MP4 verir.</div>';
     p.innerHTML =
-      '<div style="font-size:26px;letter-spacing:.16em;color:#f5a623">CLIP READY</div>' +
+      '<div style="font-size:26px;letter-spacing:.16em;color:#f5a623">KLİP HAZIR</div>' +
       '<video src="' + url + '" controls autoplay loop playsinline ' +
       'style="max-width:min(72vw,900px);max-height:52vh;border:2px solid #d8a018;background:#000"></video>' +
       '<div style="font-size:13px;color:#c9c2b4;letter-spacing:.1em">' +
       name + ' &nbsp;&bull;&nbsp; ' + (size / 1048576).toFixed(1) + ' MB &nbsp;&bull;&nbsp; ' +
-      CFG.len + 's @ ' + CFG.speed.toFixed(1) + 'x &nbsp;&bull;&nbsp; ' + player.kills + ' kills' +
+      CFG.len + ' sn @ ' + CFG.speed.toFixed(1) + 'x &nbsp;&bull;&nbsp; ' + player.kills + ' leş' +
       '</div>' + warn +
       '<div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">' +
       '<a id="dlBtn" class="btn" style="margin-top:0;text-decoration:none;display:inline-block" ' +
-      'href="' + url + '" download="' + name + '">SAVE AGAIN</a>' +
-      '<button id="reBtn" class="btn" style="margin-top:0">RECORD AGAIN</button>' +
-      '<button id="qBtn" class="btn" style="margin-top:0">BACK TO GAME</button>' +
+      'href="' + url + '" download="' + name + '">TEKRAR İNDİR</a>' +
+      '<button id="reBtn" class="btn" style="margin-top:0">YENİDEN ÇEK</button>' +
+      '<button id="qBtn" class="btn" style="margin-top:0">OYUNA DÖN</button>' +
       '</div>';
     document.body.appendChild(p);
     p.querySelector('#reBtn').onclick = function () { location.reload(); };
@@ -602,22 +602,22 @@
       var link = document.createElement('button');
       link.className = 'btn';
       link.style.cssText = 'margin-top:1.4vh;padding:.8vh 2.2vw;font-size:clamp(10px,1.5vh,15px)';
-      link.textContent = 'RECORD A 30s DEMO CLIP';
+      link.textContent = 'DEMO KLİBİ KAYDET (30 SN)';
       link.onclick = function () { location.search = '?demo=1'; };
       title.appendChild(link);
       return;
     }
 
     var start$ = document.getElementById('btnStart');
-    start$.textContent = 'RECORD DEMO';
+    start$.textContent = 'DEMO KAYDET';
     start$.onclick = start;
 
     var note = document.createElement('div');
     note.className = 'small';
     note.style.marginTop = '1.6vh';
-    note.innerHTML = 'DEMO MODE &mdash; ' + CFG.W + '&times;' + CFG.H + ' &bull; ' +
-      CFG.len + 's &bull; ' + CFG.speed.toFixed(1) + '&times; speed &bull; auto-saves when done' +
-      '<br>the game plays itself: Yildiz Tepesi arena, 233 Sk, secret wall, alley, theatre';
+    note.innerHTML = 'DEMO MODU &mdash; ' + CFG.W + '&times;' + CFG.H + ' &bull; ' +
+      CFG.len + ' sn &bull; ' + CFG.speed.toFixed(1) + '&times; hız &bull; bitince kendiliğinden kaydeder' +
+      '<br>oyun kendi kendini oynar: Yıldız Tepesi arenası, 233. Sk, gizli duvar, ara sokak, tiyatro';
     title.appendChild(note);
   }
 

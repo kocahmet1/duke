@@ -510,6 +510,11 @@
      number and every ratio above exactly as calibrated.
      ================================================================== */
   var SUNNY = false;
+  /* wheel tracks, grit margins and tar bandages: authored for the sun, but a
+     sealed crack is on the road in any weather.  Built from whichever asphalt
+     triple is live, so under cloud it is a few levels of difference and under
+     sun a stop. */
+  var ROAD_DETAIL = false;
   /* unit vector TOWARD the mission-4 key light: south-west, 44 deg up. */
   var SUN = [-0.56, 0.69, 0.45];
   /* tone multipliers for the pine/cedar/deciduous crowns; the atlas is
@@ -1549,7 +1554,7 @@
     }
     markCard(318, 282, 2.1, 2.1, 0.052, M_MANHOLE, C.curb);
     markCard(400, 282, 2.1, 2.1, 0.052, M_MANHOLE, C.curb);
-    if (SUNNY) sunRoadDetail();
+    if (SUNNY || ROAD_DETAIL) sunRoadDetail();
   }
 
   /* =====================================================================
@@ -4734,7 +4739,15 @@
     if(!global.document||!document.createElement)throw new Error('canvas document unavailable');
     /* MISSION 4 ONLY.  Must run before initPilesMaterials(), initToneCache()
        and initFurnitureTones(), all of which cache derivatives of C. */
-    if(NZ.level===4)applySunnyProfile();
+    /* ...AND ONLY WHILE THE SKY IS ACTUALLY SUNNY.  Mission 4 went back to
+       an overcast dome with the photographic sky, and the physical albedos
+       applySunnyProfile() installs have nothing to light them there: the
+       park carriageway measured 54/255 beside nz-street-ground's 137.  The
+       table at the top of this file IS the overcast calibration, so under
+       NZ.street.SKY.overcast the right move is to not replace it.  The road
+       detail pass is kept either way -- see ROAD_DETAIL. */
+    var skyNow=NZ.street&&NZ.street.SKY;
+    if(NZ.level===4){ROAD_DETAIL=true;if(!(skyNow&&skyNow.overcast))applySunnyProfile();}
     initPilesMaterials();buildAll();meshAll();
     installed=true;STATS.ok=true;STATS.ms=Math.round((global.performance&&performance.now?performance.now():Date.now())-t0);
     if(NZ.flags)NZ.flags.streetPark=true;

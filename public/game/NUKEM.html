@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>NUKE ZONE 3D &mdash; Mission 1: Hollywood Holocaust</title>
-<meta name="description" content="A retro browser shooter with connected upper floors, rooftops, fire stairs, lifts, and underground service routes.">
-<meta property="og:title" content="NUKE ZONE 3D &mdash; The Complex Goes Vertical">
-<meta property="og:description" content="Fight from radioactive tunnels through a multi-floor city complex and onto the roof.">
+<title>Seydişehir Çatışma &mdash; Görev 1: Hollywood Kıyameti</title>
+<meta name="description" content="Retro bir tarayıcı nişancı oyunu: birbirine bağlı üst katlar, çatılar, yangın merdivenleri, asansörler ve yer altı servis yolları.">
+<meta property="og:title" content="Seydişehir Çatışma &mdash; Kompleks Artık Çok Katlı">
+<meta property="og:description" content="Radyoaktif tünellerden çok katlı bir şehir kompleksine, oradan da çatıya kadar savaş.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="/og.png">
 <meta property="og:image:width" content="1731">
@@ -120,7 +120,7 @@
     background:radial-gradient(ellipse at 50% 44%,rgba(50,20,7,.78),rgba(4,5,9,.94) 62%,rgba(0,1,4,.985));
     pointer-events:auto;padding:4vh 6vw}
   .screen.show{display:flex}
-  .screen h1{font-size:clamp(30px,8.4vh,90px);letter-spacing:.14em;color:#f5a623;
+  .screen h1{font-size:clamp(26px,min(8.4vh,5.6vw),90px);letter-spacing:.14em;color:#f5a623;
     text-shadow:0 0 28px rgba(255,106,0,.62),0 5px 0 #641902;font-weight:850}
   .screen h2{font-size:clamp(13px,2.4vh,26px);font-weight:800;letter-spacing:.34em;color:#e85842;
     margin-top:.7vh;text-shadow:0 2px 0 #000,0 0 14px rgba(180,41,20,.28)}
@@ -194,8 +194,8 @@
     <div id="stats"></div>
     <div id="feed"></div>
     <div id="hud">
-      <div class="box"><div class="lbl">HEALTH</div><div class="val" id="hpv">100</div></div>
-      <div class="box"><div class="lbl">AMMO</div><div class="val" id="amv">48</div></div>
+      <div class="box"><div class="lbl">SAĞLIK</div><div class="val" id="hpv">100</div></div>
+      <div class="box"><div class="lbl">MERMİ</div><div class="val" id="amv">48</div></div>
       <div class="box" id="invbox"><canvas id="invicon" width="64" height="64"></canvas><div id="invtxt">--</div></div>
     </div>
     <div id="keys">
@@ -206,60 +206,60 @@
   </div>
 
   <div class="screen show" id="scLoad">
-    <h1>NUKE ZONE 3D</h1><h2>MISSION 1 &mdash; HOLLYWOOD HOLOCAUST</h2>
+    <h1>SEYDİŞEHİR ÇATIŞMA</h1><h2>GÖREV 1 &mdash; HOLLYWOOD KIYAMETİ</h2>
     <div id="loadbar"><div id="loadfill"></div></div>
-    <p id="loadtxt">BOOTING BUILD ENGINE&hellip;</p>
+    <p id="loadtxt">BUILD MOTORU BAŞLATILIYOR&hellip;</p>
   </div>
 
   <div class="screen" id="scTitle">
-    <h1>NUKE ZONE 3D</h1><h2>MISSION 1 &mdash; HOLLYWOOD HOLOCAUST</h2>
+    <h1>SEYDİŞEHİR ÇATIŞMA</h1><h2>GÖREV 1 &mdash; HOLLYWOOD KIYAMETİ</h2>
     <p>
-      <span class="keyhint">W A S D</span> move &nbsp;&bull;&nbsp; <span class="keyhint">MOUSE</span> look &nbsp;&bull;&nbsp;
-      <span class="keyhint">CLICK</span> fire &nbsp;&bull;&nbsp; <span class="keyhint">RMB</span> focus / ADS / scope &nbsp;&bull;&nbsp; <span class="keyhint">E</span> open / use<br>
-      <span class="keyhint">J</span> suppressor &nbsp;&bull;&nbsp;
-      <span class="keyhint">1&ndash;9 / 0</span> or <span class="keyhint">WHEEL</span> weapons &nbsp;&bull;&nbsp;
-      <span class="keyhint">SPACE</span> jump &nbsp;&bull;&nbsp; <span class="keyhint">SHIFT</span> sprint &nbsp;&bull;&nbsp;
-      <span class="keyhint">CTRL</span> crouch &nbsp;&bull;&nbsp; <span class="keyhint">Z</span> crawl &nbsp;&bull;&nbsp; <span class="keyhint">ALT</span> walk<br>
-      <span class="keyhint">TAB</span> map &nbsp;&bull;&nbsp; <span class="keyhint">M</span> mute &nbsp;&bull;&nbsp;
-      <span class="keyhint">ESC</span> pause<br><br>
-      <span id="missionBrief">Kill everything. Find the red keycard upstairs. Hit the exit switch.<br>
-      Stairs, lifts, and service passages loop from the tunnels to the roof.</span>
+      <span class="keyhint">W&nbsp;A&nbsp;S&nbsp;D</span>&nbsp;hareket &nbsp;&bull;&nbsp; <span class="keyhint">FARE</span>&nbsp;bak &nbsp;&bull;&nbsp;
+      <span class="keyhint">SOL&nbsp;TIK</span>&nbsp;ateş &nbsp;&bull;&nbsp; <span class="keyhint">SAĞ&nbsp;TIK</span>&nbsp;odak&nbsp;/&nbsp;nişan&nbsp;/&nbsp;dürbün &nbsp;&bull;&nbsp; <span class="keyhint">E</span>&nbsp;aç&nbsp;/&nbsp;kullan<br>
+      <span class="keyhint">J</span>&nbsp;susturucu &nbsp;&bull;&nbsp;
+      <span class="keyhint">1&ndash;9&nbsp;/&nbsp;0</span>&nbsp;ya&nbsp;da&nbsp;<span class="keyhint">TEKERLEK</span>&nbsp;silahlar &nbsp;&bull;&nbsp;
+      <span class="keyhint">BOŞLUK</span>&nbsp;zıpla &nbsp;&bull;&nbsp; <span class="keyhint">SHIFT</span>&nbsp;hızlı&nbsp;koş &nbsp;&bull;&nbsp;
+      <span class="keyhint">CTRL</span>&nbsp;çömel &nbsp;&bull;&nbsp; <span class="keyhint">Z</span>&nbsp;sürün &nbsp;&bull;&nbsp; <span class="keyhint">ALT</span>&nbsp;yürü<br>
+      <span class="keyhint">TAB</span>&nbsp;harita &nbsp;&bull;&nbsp; <span class="keyhint">M</span>&nbsp;sessiz &nbsp;&bull;&nbsp;
+      <span class="keyhint">ESC</span>&nbsp;duraklat<br><br>
+      <span id="missionBrief">Hepsini temizle. Üst kattaki kırmızı anahtar kartı bul. Çıkış şalterine bas.<br>
+      Merdivenler, asansörler ve servis geçitleri tünelleri çatıya bağlıyor.</span>
     </p>
-    <div id="missions" role="radiogroup" aria-label="Mission"></div>
-    <div id="skills" role="radiogroup" aria-label="Skill level"></div>
+    <div id="missions" role="radiogroup" aria-label="Görev"></div>
+    <div id="skills" role="radiogroup" aria-label="Zorluk seviyesi"></div>
     <div id="skilltag"></div>
     <div class="menu-actions">
-      <button class="btn" id="btnContinue" disabled>LOAD LAST CHECKPOINT</button>
-      <button class="btn" id="btnStart">BEGIN</button>
+      <button class="btn" id="btnContinue" disabled>SON KAYDI YÜKLE</button>
+      <button class="btn" id="btnStart">BAŞLA</button>
     </div>
     <div class="save-note" id="continueInfo" aria-live="polite"></div>
-    <div class="small">8 SECRETS HIDDEN &mdash; PRESS <span class="keyhint">E</span> AGAINST SUSPICIOUS WALLS</div>
+    <div class="small">8 GİZLİ YER VAR &mdash; ŞÜPHELİ DUVARLARDA <span class="keyhint">E</span>'YE BAS</div>
   </div>
 
   <div class="screen" id="scPause">
-    <h1>PAUSED</h1>
-    <p>Take five, hero.<br><span class="keyhint" id="pskill"></span></p>
+    <h1>DURAKLATILDI</h1>
+    <p>Biraz soluklan, kahraman.<br><span class="keyhint" id="pskill"></span></p>
     <div class="menu-actions">
-      <button class="btn" id="btnSave">SAVE GAME</button>
-      <button class="btn" id="btnResume">RESUME</button>
+      <button class="btn" id="btnSave">OYUNU KAYDET</button>
+      <button class="btn" id="btnResume">DEVAM ET</button>
     </div>
     <div class="save-note" id="saveStatus" role="status" aria-live="polite"></div>
-    <div class="small">ESC TO GO BACK IN</div>
+    <div class="small">OYUNA DÖNMEK İÇİN ESC</div>
   </div>
 
   <div class="screen" id="scDead">
-    <h1 style="color:#d0301c;text-shadow:0 0 30px #ff2000,4px 5px 0 #400">YOU'RE DEAD</h1>
-    <h2>THE ALIENS WIN THIS ROUND</h2>
+    <h1 style="color:#d0301c;text-shadow:0 0 30px #ff2000,4px 5px 0 #400">ÖLDÜN</h1>
+    <h2>BU RAUNDU ONLAR KAZANDI</h2>
     <div id="deadTally"></div>
-    <button class="btn" id="btnRetry">TRY AGAIN</button>
+    <button class="btn" id="btnRetry">TEKRAR DENE</button>
   </div>
 
   <div class="screen" id="scWin">
-    <h1>MISSION COMPLETE</h1>
-    <h2>HOLLYWOOD HOLOCAUST CLEARED</h2>
+    <h1>GÖREV TAMAMLANDI</h1>
+    <h2>HOLLYWOOD KIYAMETİ TEMİZLENDİ</h2>
     <div id="tallies"></div>
-    <button class="btn" id="btnNext" style="display:none">NEXT MISSION</button>
-    <button class="btn" id="btnAgain">PLAY AGAIN</button>
+    <button class="btn" id="btnNext" style="display:none">SONRAKİ GÖREV</button>
+    <button class="btn" id="btnAgain">TEKRAR OYNA</button>
   </div>
 </div>
 
@@ -670,8 +670,8 @@ function buildTextures() {
     g.strokeStyle = '#71767c'; g.lineWidth = 4; g.strokeRect(38, 78, 180, 104);
     g.fillStyle = '#0d2a12'; g.fillRect(46, 86, 78, 88);
     g.font = 'bold 15px monospace'; g.fillStyle = '#4dff66';
-    g.fillText('ACCESS', 50, 104);
-    g.fillStyle = '#ff3b2e'; g.font = 'bold 14px monospace'; g.fillText('LOCKED', 50, 166);
+    g.fillText('ERİŞİM', 50, 104);
+    g.fillStyle = '#ff3b2e'; g.font = 'bold 14px monospace'; g.fillText('KİLİTLİ', 50, 166);
     for (let y = 0; y < 3; y++) for (let x = 0; x < 5; x++) {
       g.fillStyle = Math.random() < .35 ? '#ffdd44' : '#354034';
       g.fillRect(52 + x * 13, 116 + y * 12, 8, 7);
@@ -1658,7 +1658,7 @@ function buildPickupSprites() {
   pickTex('shells', (g, s) => {
     rrect(g, s * .18, s * .42, s * .64, s * .34, 5, shade(g, s / 2, s * .58, s * .3, s * .18, '#2f6a3a', '#123018'), OUT, 4);
     g.fillStyle = '#e8e2c8'; g.font = 'bold 15px monospace'; g.textAlign = 'center';
-    g.fillText('SHELLS', s * .5, s * .63);
+    g.fillText('FİŞEK', s * .5, s * .63);
     for (let i = 0; i < 3; i++) {
       rrect(g, s * .24 + i * s * .18, s * .26, s * .12, s * .2, 3, '#b03030', OUT, 3);
       g.fillStyle = '#d8b23a'; g.fillRect(s * .24 + i * s * .18, s * .38, s * .12, s * .07);
@@ -4443,8 +4443,13 @@ function buildStreetMap() {
   paint(120, 34, 120, 34, rPharmacyEntry);
   /* Keep the old bake-hall landmark as one patched, walkable boulevard tile;
      it preserves the campaign route without recreating a building in the
-     widened carriageway. */
-  paint(130, 18, 130, 18, rBake);
+     widened carriageway.  It is OPEN SKY like the road round it: painted
+     rBake it kept the hall's 13-unit ceiling, so buildWorld roofed one cell
+     of the carriageway and walled the 39 units between that roof and the
+     street's own c = 52 on all four sides -- a concrete column hanging over
+     the middle of 232 Sk, visible from the roundabout. */
+  const rBakeTile = region({ f: GF, c: 52, ftex: 'concrete', wtex: 'concrete', sky: true, amb: [.53, .57, .63] });
+  paint(130, 18, 130, 18, rBakeTile);
 
   /* the red keycard gate on the park crest line, and the lane behind it */
   gate(66, 40, 'key', rGateLane);
@@ -4539,39 +4544,50 @@ function buildStreetMap() {
   light(161, 72, 17, [.90, .80, .55], 12, .78);
 
   /* ---- creatures ----
-     Thirty-six, and the shape of the level decides the shape of the table: a
-     street this open cannot hold men the way a corridor does, so almost every
-     outdoor entry is a PAIR working one piece of cover with a third covering
-     their retreat into a doorway.  The interiors are where the fours live.
-     Nothing at all stands in the first ten cells of the park road, because
-     the player arrives there facing forty metres of downhill with no cover
-     and the first thing he should get to do is choose. */
+     Thirty-eight, and WHERE they stand is the design.  The player is put out
+     on the east tail with the pistol, so the street he arrives on -- the east
+     tail, the 230 Sk crossing and the whole Seydikent canyon -- starts EMPTY:
+     nobody stands east of the roundabout.  That walk is where he picks up the
+     shotgun and the rifle and reads the street, and the first contact is the
+     roundabout itself.  Nothing is fenced off: a man who has seen him follows
+     him back down the canyon, all the way to the barricade if he runs that
+     far (this mission has no grace zone).
+
+     The nine that used to hold the canyon and 230 Sk went to the three places
+     the mission is decided: the crest, where the checkpoint is, and the two
+     232 Sk arms -- the right wing holds the red card, the left wing is the long
+     flank onto the park.  A street this open cannot hold men the way a
+     corridor does, so almost every outdoor entry is a PAIR working one piece
+     of cover with a third covering their retreat into a doorway; the
+     interiors are where the fours live.  A-BLOK and B-BLOK keep theirs: both
+     are entered only from the arms, so their men belong to the wings even
+     though the rooms run under the canyon. */
   const E4 = [
+    /* the checkpoint on the crest - the last forty metres, held uphill: the
+       boom, both carriageways either side of the median, and a marksman on
+       the promenade looking straight down the slope */
+    ['pig', 68, 42], ['enforcer', 70, 38], ['trooper', 72, 48], ['octa', 69, 52],
     /* the park and its split carriageway - the approach fight */
     ['trooper', 84, 45], ['pig', 90, 41], ['enforcer', 98, 44],
     ['trooper', 106, 58], ['octa', 118, 43],
     /* the Yildiz Tepesi hall: four defenders on four broken lanes */
     ['trooper', 78, 26], ['enforcer', 90, 28], ['pig', 91, 33], ['trooper', 69, 27],
-    /* the roundabout - the island and the two mouths */
+    /* the roundabout - the island and the two mouths.  First contact. */
     ['enforcer', 138, 47], ['trooper', 143, 39],
-    /* 232 Sk north: the open street, pharmacy approach, and balcony */
+    /* 232 Sk north, the right wing: the open street, pharmacy approach,
+       balcony, and the far end of the arm toward the cemetery line */
     ['pig', 140, 30], ['trooper', 138, 22],
     ['enforcer', 132, 24], ['octa', 127, 19],
     ['octa', 146, 16], ['trooper', 154, 21],
-    /* the canyon itself: three holdings behind the parked cars and the walls */
-    ['trooper', 150, 44], ['pig', 165, 44], ['enforcer', 162, 47],
-    ['trooper', 178, 40], ['octa', 186, 44],
-    /* A-BLOK ground floor */
+    ['trooper', 127, 8], ['pig', 144, 12],
+    /* A-BLOK ground floor - its door is on the right wing */
     ['enforcer', 149, 32], ['trooper', 158, 30], ['pig', 175, 31], ['octa', 166, 26],
-    /* B-BLOK ground floor */
+    /* B-BLOK ground floor - its door is on the left wing */
     ['trooper', 148, 58], ['enforcer', 160, 57], ['pig', 176, 58], ['octa', 166, 63],
-    /* 232 Sk south: the park gate flank and the second balcony */
+    /* 232 Sk south, the left wing: the park gate flank, the second balcony,
+       and the long arm down toward the police line */
     ['trooper', 140, 58], ['enforcer', 141, 68], ['octa', 146, 72], ['pig', 155, 68],
-    /* 230 Sk and the east tail - the FIRST holding now, not the last, so the
-       two that used to stand on the gate approach are pulled back off the
-       spawn: a contact at four metres is not an opening, it is an ambush the
-       player never had a frame to read. */
-    ['enforcer', 193, 33], ['trooper', 195, 36], ['pig', 191, 45], ['octa', 196, 40]
+    ['enforcer', 123, 60], ['trooper', 132, 74], ['octa', 131, 86]
   ];
   for (const e of E4) spawn(e[0], e[1], e[2]);
 
@@ -4580,9 +4596,12 @@ function buildStreetMap() {
      rifle lie within the first thirty metres; a campaign player who already
      owns them just collects the ammo. */
   const P4 = [
-    /* One armoured patrol remains on the main east-west axis.  The photographed
-       north/downhill arm is intentionally vehicle-free. */
-    ['apc', 152, 43],
+    /* One armoured patrol.  It starts on the park road just west of the
+       roundabout and, until its crew has the player, patrols only the western
+       half of the road network -- the park, the roundabout and both 232 Sk
+       arms (nz-apc.js PATROL_EAST_X) -- so it never cruises down the canyon to
+       the spawn on its own.  Once it has him, a hunt routes anywhere. */
+    ['apc', 133, 41],
     /* ---- two SENTINELs, and they are outdoor enemies here.
 
        navBuild bakes a second walk grid for anything carrying
@@ -4600,11 +4619,12 @@ function buildStreetMap() {
        opposite direction: get inside and it cannot follow you. One holds the
        roundabout, where you first see it from the park crest coming down the
        slope; one holds the cordon itself, in front of the boom. */
-    /* one at the roundabout, one mid-street.  The second used to stand on the
-       gate approach at (202,43) because that was the end of the route; it is
-       four cells from the new spawn, so it moves to the middle of the run
-       where it is a moment rather than an ambush. */
-    ['spider', 139, 47], ['spider', 176, 44],
+    /* one at the roundabout, one in front of the boom.  The second stood
+       mid-canyon at (176,44) while the canyon was the opening fight; the
+       canyon starts empty now, so it goes back to the job above -- holding the
+       cordon itself -- on the crest, where the checkpoint is, one cell north
+       of the armoured car's westbound lane. */
+    ['spider', 139, 47], ['spider', 77, 39],
     /* the park crest and the split road */
     /* THE FIRST THIRTY METRES MOVED TO THE OTHER END OF THE STREET.  These
        five sat on the park crest because that is where the mission used to
@@ -4772,7 +4792,14 @@ function buildWorld() {
         const nf = floorAt(nx2, ny2), nc = ceilAt(nx2, ny2);
         segs = [];
         if (nf > f + .02) segs.push([f, nf]);
-        if (nc < c - .02) segs.push([nc, c]);
+        /* A ceiling step between two OPEN-SKY cells is a wall with nothing
+           above or behind it.  Mission 4's park climbs seven per cent with
+           c = f + 58 per column while the streets round it stay at c = 52, so
+           every column boundary hung an 8 cm strip in the sky and the park's
+           three street edges hung a six-unit band of concrete over the
+           roundabout.  Sky meeting sky has no ceiling to step. */
+        const skyToSky = LEVEL === 4 && R.sky && regAt(nx2, ny2).sky;
+        if (nc < c - .02 && !skyToSky) segs.push([nc, c]);
       }
       for (const s of segs) addWall(x, y, d[0], d[1], s[0], s[1], wtex, fitUV, R.amb, false);
     }
@@ -5583,19 +5610,19 @@ const player = {
 
 const WPN = [
   {
-    name: 'PISTOL', vm: 'pistol', ammo: 'clip', use: 1, dmg: 16, rof: .19, auto: false,
+    name: 'TABANCA', vm: 'pistol', ammo: 'clip', use: 1, dmg: 16, rof: .19, auto: false,
     pellets: 1, spread: .009, adsSpread: .0025, kick: 1.1, snd: 'pistol', range: 300,
     casing: 'casebrass', ejectDelay: .035, adsFov: 68, muzzle: [.60, .42], smoke: .48,
     swap: .17, raise: .19, weight: .78, vmScale: 1.075
   },
   {
-    name: 'SHOTGUN', vm: 'shotgun', ammo: 'shell', use: 1, dmg: 11, rof: .82, auto: false,
+    name: 'POMPALI', vm: 'shotgun', ammo: 'shell', use: 1, dmg: 11, rof: .82, auto: false,
     pellets: 8, spread: .055, adsSpread: .035, kick: 3.2, snd: 'shotgun', range: 200,
     pump: true, casing: 'caseshell', ejectDelay: .23, adsFov: 70, muzzle: [.66, .43], smoke: 1,
     swap: .29, raise: .32, weight: 1.08
   },
   {
-    name: 'CHAINGUN', vm: 'chaingun', ammo: 'chain', use: 1, dmg: 12, rof: .085, auto: true,
+    name: 'MAKİNELİ', vm: 'chaingun', ammo: 'chain', use: 1, dmg: 12, rof: .085, auto: true,
     pellets: 1, spread: .032, adsSpread: .016, kick: .55, snd: 'chain', range: 300,
     casing: 'casebrass', ejectDelay: .025, adsFov: 73, muzzle: [.65, .43], smoke: .30,
     swap: .36, raise: .38, weight: 1.28
@@ -5606,7 +5633,7 @@ const WPN = [
     adsFov: 62, muzzle: [.68, .44], smoke: 1.45, swap: .40, raise: .43, weight: 1.36
   },
   {
-    name: 'RIFLE', vm: 'rifle', ammo: 'rifle', use: 1, dmg: 26, rof: .105, auto: true,
+    name: 'TÜFEK', vm: 'rifle', ammo: 'rifle', use: 1, dmg: 26, rof: .105, auto: true,
     pellets: 1, spread: .014, adsSpread: .004, kick: 1.35, snd: 'rifle', range: 340,
     /* 28 against the 84 of the hip is tan(42)/tan(14) = 3.61x, which is the
        magnification the optic on the model is built as. The other four sit
@@ -5624,7 +5651,7 @@ const WPN = [
        usual split: nz-weapons.js owns a real 3D grenade (buildGrenade) when
        the module is up, and the 2D glove sprites below are the fallback for
        a bare NUKEM.html, exactly like every other weapon. */
-    name: 'GRENADE', vm: 'grenade', ammo: 'grenade', use: 1, dmg: 0, rof: .8, auto: false,
+    name: 'EL BOMBASI', vm: 'grenade', ammo: 'grenade', use: 1, dmg: 0, rof: .8, auto: false,
     pellets: 0, spread: 0, adsSpread: 0, kick: .8, snd: 'gthrow', range: 0,
     thrown: true,
     adsFov: 70, muzzle: [.5, .5], smoke: 0, swap: .2, raise: .24, weight: .6
@@ -5641,7 +5668,7 @@ const WPN = [
     /* the trooper's AKM: 7.62x39 out of a stamped receiver. Hits harder per
        round than the M4 pattern and climbs harder for it; its ammo pool is
        fed ONLY by other fallen AKs. */
-    name: 'AK-PATTERN', vm: 'ak', ammo: 'ak', use: 1, dmg: 15, rof: .105, auto: true,
+    name: 'AK TİPİ', vm: 'ak', ammo: 'ak', use: 1, dmg: 15, rof: .105, auto: true,
     pellets: 1, spread: .016, adsSpread: .005, kick: 1.6, snd: 'rifle', range: 300,
     casing: 'casebrass', ejectDelay: .03, adsFov: 66, muzzle: [.62, .42], smoke: .60,
     swap: .30, raise: .33, weight: 1.06
@@ -5651,7 +5678,7 @@ const WPN = [
        AR-15 TACTICAL -- one cartridge, two guns -- so enforcer corpses feed
        the rifle economy and vice versa. Faster handling than the chaingun,
        tighter than the AK, softer per round than both. */
-    name: 'M4-PATTERN', vm: 'm4', ammo: 'rifle', use: 1, dmg: 13, rof: .085, auto: true,
+    name: 'M4 TİPİ', vm: 'm4', ammo: 'rifle', use: 1, dmg: 13, rof: .085, auto: true,
     pellets: 1, spread: .011, adsSpread: .0032, kick: 1.0, snd: 'chain', range: 320,
     casing: 'casebrass', ejectDelay: .03, adsFov: 62, muzzle: [.62, .42], smoke: .40,
     swap: .28, raise: .31, weight: .98
@@ -5663,7 +5690,7 @@ const WPN = [
        marksmen, four at a time. `scope` rides the same overlay the RIFLE
        uses; the bolt costs 1.35s between shots and the ejectDelay matches
        the bolt lift, not the trigger. */
-    name: 'BOLT DMR', vm: 'dmr', ammo: 'dmr', use: 1, dmg: 52, rof: 1.35, auto: false,
+    name: 'SÜRGÜLÜ DMR', vm: 'dmr', ammo: 'dmr', use: 1, dmg: 52, rof: 1.35, auto: false,
     pellets: 1, spread: .007, adsSpread: .0012, kick: 3.6, snd: 'rifle', range: 420,
     casing: 'casebrass', ejectDelay: .55, adsFov: 26, muzzle: [.62, .42], smoke: .80,
     swap: .32, raise: .36, weight: 1.18, scope: true
@@ -5674,7 +5701,7 @@ const WPN = [
        inward and gains collapse energy with age. RMB snaps every live core
        early, including one still in flight, trading yield for timing and
        making airbursts and chained traps possible. */
-    name: 'NULLSTAR', vm: 'nullstar', ammo: 'nullcore', use: 1, dmg: 0, rof: 1.05, auto: false,
+    name: 'SIFIRYILDIZ', vm: 'nullstar', ammo: 'nullcore', use: 1, dmg: 0, rof: 1.05, auto: false,
     pellets: 0, spread: 0, adsSpread: 0, kick: 4.8, snd: 'nullfire', range: 0,
     nullstar: true, altDetonate: true, adsFov: 84, muzzle: [.66, .42], smoke: .16,
     swap: .42, raise: .46, weight: 1.42
@@ -5914,7 +5941,7 @@ function manualSaveData() {
 function saveSummary(saved) {
   const t = Math.max(0, Number(saved.player.time) || 0);
   const mins = Math.floor(t / 60), secs = Math.floor(t - mins * 60);
-  return 'MISSION ' + saved.level + '  •  ' + Math.ceil(saved.player.hp) + ' HEALTH  •  ' +
+  return 'GÖREV ' + saved.level + '  •  ' + Math.ceil(saved.player.hp) + ' SAĞLIK  •  ' +
     mins + ':' + (secs < 10 ? '0' : '') + secs;
 }
 
@@ -5926,14 +5953,14 @@ function refreshContinueUI(saved) {
   btn.style.display = '';
   btn.disabled = !slot;
   btn.setAttribute('aria-disabled', slot ? 'false' : 'true');
-  begin.textContent = slot ? 'RESTART MISSION' : 'BEGIN';
-  info.textContent = slot ? saveSummary(slot) : 'NO CHECKPOINT SAVED YET';
+  begin.textContent = slot ? 'YENİDEN BAŞLA' : 'BAŞLA';
+  info.textContent = slot ? saveSummary(slot) : 'HENÜZ KAYIT YOK';
 }
 
 function saveManualGame() {
   const status = document.getElementById('saveStatus');
   if (!state.paused || state.ended || !player.alive) {
-    if (status) { status.textContent = 'SAVE UNAVAILABLE'; status.className = 'save-note err'; }
+    if (status) { status.textContent = 'ŞU AN KAYIT YAPILAMAZ'; status.className = 'save-note err'; }
     return false;
   }
   try {
@@ -5941,11 +5968,11 @@ function saveManualGame() {
     localStorage.setItem(MANUAL_SAVE_KEY, JSON.stringify(saved));
     bootManualSave = saved;
     refreshContinueUI(saved);
-    if (status) { status.textContent = 'GAME SAVED  •  ' + saveSummary(saved); status.className = 'save-note ok'; }
+    if (status) { status.textContent = 'OYUN KAYDEDİLDİ  •  ' + saveSummary(saved); status.className = 'save-note ok'; }
     return true;
   } catch (err) {
     console.warn('[save] could not write save game:', err);
-    if (status) { status.textContent = 'SAVE FAILED — BROWSER STORAGE IS UNAVAILABLE'; status.className = 'save-note err'; }
+    if (status) { status.textContent = 'KAYIT BAŞARISIZ — TARAYICI DEPOLAMASI KULLANILAMIYOR'; status.className = 'save-note err'; }
     return false;
   }
 }
@@ -6093,8 +6120,8 @@ function continueManualGame() {
   setSkill(saved.skill);
   startGame();
   if (restoreManualGame(saved)) {
-    message(lastRestoreWasCompatible ? 'CHECKPOINT RESTORED' : 'GAME RESTORED');
-    subtitle('MISSION ' + LEVEL + (lastRestoreWasCompatible ? ' — PLAYER PROGRESS RESTORED' : ' — PROGRESS RESTORED'), 3600);
+    message(lastRestoreWasCompatible ? 'KAYIT NOKTASI YÜKLENDİ' : 'OYUN YÜKLENDİ');
+    subtitle('GÖREV ' + LEVEL + (lastRestoreWasCompatible ? ' — OYUNCU İLERLEMESİ YÜKLENDİ' : ' — İLERLEME YÜKLENDİ'), 3600);
     return true;
   }
   /* Restore is intentionally all-or-nothing. A module or mesh failure may
@@ -6153,7 +6180,7 @@ function scopeMask() {
 function toggleSuppressor() {
   if (!state.playing || !player.alive || player.pending >= 0) return;
   const w = WPN[player.weapon];
-  if (!w || !w.canSuppress) { message('NO THREADS ON THIS ONE'); return; }
+  if (!w || !w.canSuppress) { message('BU SİLAHA SUSTURUCU TAKILMAZ'); return; }
   if (player.cool > 0) return;
   player.suppressed = !player.suppressed;
   /* two turns on a QD mount: the draw animation already reads as the hands
@@ -6162,7 +6189,7 @@ function toggleSuppressor() {
   player.raiseT = player.raiseDur = w.raise || .3;
   player.cool = Math.max(player.cool, player.raiseDur);
   sfx('switch', player.x, player.z);
-  message(player.suppressed ? 'SUPPRESSOR ON' : 'SUPPRESSOR OFF');
+  message(player.suppressed ? 'SUSTURUCU TAKILDI' : 'SUSTURUCU ÇIKARILDI');
 }
 /* true only when the can is actually on a weapon that can take one */
 function suppressed() {
@@ -6188,11 +6215,11 @@ function bindInput() {
     if (skillKey(e)) return;
     keysDown[e.code] = true;
     if (e.code === 'Tab') { showMap = !showMap; e.preventDefault(); }
-    if (e.code === 'KeyM') { AU.muted = !AU.muted; message(AU.muted ? 'SOUND OFF' : 'SOUND ON'); }
+    if (e.code === 'KeyM') { AU.muted = !AU.muted; message(AU.muted ? 'SES KAPALI' : 'SES AÇIK'); }
     if (e.code === 'KeyE') useAction();
     if (e.code === 'KeyQ') useMedpack();
     if (e.code === 'KeyJ') toggleSuppressor();
-    if (e.code === 'KeyY') { inspectMode = !inspectMode; message(inspectMode ? 'INSPECT MODE - ENEMIES FROZEN' : 'INSPECT MODE OFF'); }
+    if (e.code === 'KeyY') { inspectMode = !inspectMode; message(inspectMode ? 'İNCELEME MODU - DÜŞMANLAR DONDURULDU' : 'İNCELEME MODU KAPALI'); }
     if (e.code === 'KeyZ' && state.playing) toggleCrawl();
     /* Space doubles as "get up" when prone. Edge-triggered here rather than
        in the movement tick so a blocked ceiling cannot spam the message, and
@@ -6256,17 +6283,17 @@ function headroomFor(eyeH) {
 function standFromCrawl(silent) {
   const wantCrouch = keysDown.ControlLeft || keysDown.ControlRight || keysDown.KeyC;
   if (!headroomFor(wantCrouch ? EYE_CROUCH : EYE)) {
-    if (!silent) message('NO ROOM TO STAND');
+    if (!silent) message('AYAĞA KALKACAK YER YOK');
     return false;
   }
   player.crawling = false;
-  if (!silent) message('ON YOUR FEET');
+  if (!silent) message('AYAĞA KALKTIN');
   return true;
 }
 function toggleCrawl() {
   if (player.crawling) { standFromCrawl(); return; }
   player.crawling = true;
-  message('CRAWLING');
+  message('SÜRÜNÜYORSUN');
 }
 
 /* ------------------------------------------------------------- movement -- */
@@ -6357,7 +6384,7 @@ function updatePlayer(dt) {
   if (onLift && player.onGround && Math.abs(player.y - onLift.y) < .9) {
     if (!onLift.lock) {
       onLift.standT += dt;
-      if (onLift.standT > .45) { callLift(onLift); message(onLift.tgt > onLift.y ? 'GOING UP' : 'GOING DOWN'); }
+      if (onLift.standT > .45) { callLift(onLift); message(onLift.tgt > onLift.y ? 'YUKARI ÇIKIYOR' : 'AŞAĞI İNİYOR'); }
     }
   } else if (onLift) { onLift.standT = 0; }
 
@@ -6372,7 +6399,7 @@ function updatePlayer(dt) {
     const nearAStop = Math.min(Math.abs(player.y - L.lo), Math.abs(player.y - L.hi)) < 1.6;
     if (!L._adj || L === onLift || atMyLevel || !nearAStop) { L.waitT = 0; continue; }
     L.waitT += dt;
-    if (L.waitT > 1.0 && Math.abs(L.y - L.tgt) < 1e-3) { L.waitT = 0; callLift(L); message('LIFT CALLED'); }
+    if (L.waitT > 1.0 && Math.abs(L.y - L.tgt) < 1e-3) { L.waitT = 0; callLift(L); message('ASANSÖR ÇAĞRILDI'); }
   }
 
   /* head bob + footsteps */
@@ -6469,7 +6496,7 @@ function markSeen() {
 /* -------------------------------------------------------------- weapons -- */
 function selectWeapon(n) {
   if (n === player.weapon && player.pending < 0) return;
-  if (!player.has[n]) { message('YOU DON\'T HAVE THAT'); return; }
+  if (!player.has[n]) { message('O SİLAH SENDE YOK'); return; }
   player.pending = n; player.swapDur = WPN[n].swap || .22; player.swapT = player.swapDur; sfx('swap');
 }
 function fire() {
@@ -6479,7 +6506,7 @@ function fire() {
     /* The empty projector is still the remote for every deployed core. Keep
        it in hand so a stray follow-up LMB cannot steal the player's RMB snap. */
     if (w.nullstar && nullstars.length) {
-      message('CORE DEPLOYED - RMB TO SNAP');
+      message('ÇEKİRDEK KURULU - PATLATMAK İÇİN SAĞ TIK');
       return;
     }
     for (let i = 0; i < WPN.length; i++) if (player.has[i] && player.ammo[WPN[i].ammo] > 0) { selectWeapon(i); break; }
@@ -6771,16 +6798,16 @@ function killPlayer() {
   /* who did it, so the last line of the feed answers the only question the
      player has on the death screen */
   const k = KILL_BY.enemy;
-  if (k) killFeed(displayName(k.kind), ENEMY_WEP[k.kind] || 'RIFLE', 'YOU', { victimYou: true, head: KILL_BY.head });
-  else killFeed('THE COMPLEX', ['RPG', 'GRENADE', 'NULLSTAR'].includes(KILL_BY.wep) ? KILL_BY.wep : 'HAZARD', 'YOU', { victimYou: true });
+  if (k) killFeed(displayName(k.kind), ENEMY_WEP[k.kind] || 'TÜFEK', 'SEN', { victimYou: true, head: KILL_BY.head });
+  else killFeed('ORTAM', ['RPG', 'EL BOMBASI', 'SIFIRYILDIZ'].includes(KILL_BY.wep) ? KILL_BY.wep : 'TEHLİKE', 'SEN', { victimYou: true });
   el('ui').style.opacity = '0'; el('overlay').style.opacity = '0';
   sfx('dead');
   el('deadTally').innerHTML = '<div id="tallies">' + tallyHTML() + '</div>';
   setTimeout(() => { state.playing = false; showScreen('scDead'); }, 1100);
 }
 function useMedpack() {
-  if (player.medpack <= 0) { message('NO MEDKIT'); return; }
-  if (player.hp >= 100) { message('YOU FEEL FINE'); return; }
+  if (player.medpack <= 0) { message('SAĞLIK KİTİ YOK'); return; }
+  if (player.hp >= 100) { message('GAYET İYİSİN'); return; }
   const need = Math.min(100 - player.hp, player.medpack);
   player.hp += need; player.medpack -= need;
   sfx('pickup');
@@ -6796,21 +6823,21 @@ function useAction() {
   const d = { x: vd.x / hl, z: vd.z / hl };
   const pcx = Math.floor(player.x / CELL), pcy = Math.floor(player.z / CELL);
   const here = liftAt(pcx, pcy);
-  if (here) { if (callLift(here)) message(here.tgt > here.y ? 'GOING UP' : 'GOING DOWN'); return; }
+  if (here) { if (callLift(here)) message(here.tgt > here.y ? 'YUKARI ÇIKIYOR' : 'AŞAĞI İNİYOR'); return; }
   for (const dist of [2.2, 4.4, 6.2]) {
     const cx = Math.floor((player.x + d.x * dist) / CELL), cy = Math.floor((player.z + d.z * dist) / CELL);
     if (!inb(cx, cy)) continue;
     const L2 = liftAt(cx, cy);
-    if (L2) { if (callLift(L2)) message('LIFT CALLED'); return; }
+    if (L2) { if (callLift(L2)) message('ASANSÖR ÇAĞRILDI'); return; }
     const t = grid[idx(cx, cy)];
     if (t === S_EXIT) { winLevel(); return; }
     if (t === S_DOOR || t === S_KEY || t === S_SECRET) {
       const dr = doorAt(cx, cy);
       if (!dr || dr.used) continue;
-      if (dr.kind === 'key' && !player.keys.red) { message('YOU NEED THE RED KEYCARD'); sfx('locked'); return; }
+      if (dr.kind === 'key' && !player.keys.red) { message('KIRMIZI ANAHTAR KART GEREKİYOR'); sfx('locked'); return; }
       if (dr.secret) {
         dr.used = true; player.secrets++;
-        message('A SECRET PLACE!'); sfx('secret'); sfx('push', cx * CELL, cy * CELL);
+        message('GİZLİ BİR YER!'); sfx('secret'); sfx('push', cx * CELL, cy * CELL);
       } else {
         dr.used = true; sfx('door', cx * CELL, cy * CELL);
       }
@@ -6821,7 +6848,7 @@ function useAction() {
   /* last resort: a lift in any neighbouring cell answers the call */
   for (const n of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const L3 = liftAt(pcx + n[0], pcy + n[1]);
-    if (L3 && callLift(L3)) { message('LIFT CALLED'); return; }
+    if (L3 && callLift(L3)) { message('ASANSÖR ÇAĞRILDI'); return; }
   }
 }
 function updateDoors(dt) {
@@ -6940,23 +6967,23 @@ const pickupShadowDummy = new THREE.Object3D();
    and the title-screen picker read their bounds from it, so adding a mission
    is one row here plus one builder. */
 const MISSIONS = [
-  { name: 'HOLLYWOOD HOLOCAUST', where: 'THE COMPLEX, AFTER DARK' },
-  { name: 'THE CRUCIBLE', where: 'THE TOURNAMENT TIERS' },
-  { name: 'BLACKSTAR', where: 'THE REACTOR CITADEL' },
-  { name: 'THE CORDON', where: '233. SOKAK, OVERCAST' }
+  { name: 'HOLLYWOOD KIYAMETİ', where: 'KOMPLEKS, KARANLIK ÇÖKÜNCE' },
+  { name: 'ER MEYDANI', where: 'TURNUVA TRİBÜNLERİ' },
+  { name: 'KARAYILDIZ', where: 'REAKTÖR KALESİ' },
+  { name: 'ABLUKA', where: '233. SOKAK, KAPALI HAVA' }
 ];
 
 const SKILLS = [
-  { name: "PIECE OF CAKE", tag: "They react late, shoot wide, and act alone.",
+  { name: "ÇOCUK OYUNCAĞI", tag: "Geç tepki verirler, savruk ateş ederler, yalnız hareket ederler.",
     react: 1.85, err: 2.30, dmg: .45, squadGuns: 1, cap: 2, grace: 20,
     coordinate: false, shotHear: 24 },
-  { name: "LET'S ROCK", tag: "Room to peek, trade, and reload. The intended fight.",
+  { name: "HADİ BAKALIM", tag: "Köşeden bakmaya, karşılık vermeye ve şarjör değiştirmeye vakit var. Tasarlandığı gibi bir çatışma.",
     react: 1.45, err: 1.70, dmg: .62, squadGuns: 2, cap: 3, grace: 8,
     coordinate: true, shotHear: Infinity },
-  { name: "COME GET SOME", tag: "They punish a bad angle. Use cover or die in it.",
+  { name: "GELİN DE GÖRÜN", tag: "Kötü açıyı affetmezler. Siper al ya da orada öl.",
     react: 1.18, err: 1.28, dmg: .80, squadGuns: 2, cap: 4, grace: 3,
     coordinate: true, shotHear: Infinity },
-  { name: "DAMN I'M GOOD", tag: "Full CS2 tuning. Every mistake is fatal.",
+  { name: "ÇOK İYİYİM BE", tag: "Tam CS2 ayarı. Her hata ölümcül.",
     react: 1.00, err: 1.00, dmg: 1.00, squadGuns: 3, cap: 5, grace: 0,
     coordinate: true, shotHear: Infinity }
 ];
@@ -9882,7 +9909,7 @@ function damageEnemy(e, dmg, dir, hitPoint, quiet) {
       if (woke) squadRadio(e.squad, e, e.ai.kx, e.ai.ky, e.ai.kz, .4, 'man-down');
     }
     if (woke) sfx('call_down', e.x, e.z);
-    killFeed('YOU', KILL_BY.wep, displayName(e.kind),
+    killFeed('SEN', KILL_BY.wep, displayName(e.kind),
       { killerYou: true, head: lastKillHead, silent: !!quiet && woke === 0 });
     const deathAt = new THREE.Vector3(e.x, e.mesh.position.y, e.z);
     if (e.cfg.mechanical) {
@@ -9927,39 +9954,39 @@ function damageEnemy(e, dmg, dir, hitPoint, quiet) {
 
 /* -------------------------------------------------------------- pickups -- */
 const PICKDEF = {
-  clip: { tex: 'clip', msg: 'AMMO FOR PISTOL!', size: 1.7, take: () => addAmmo('clip', 24) },
-  shells: { tex: 'shells', msg: 'SHOTGUN SHELLS!', size: 2.0, take: () => addAmmo('shell', 10) },
-  cbelt: { tex: 'cbelt', msg: 'CHAINGUN AMMO!', size: 2.0, take: () => addAmmo('chain', 50) },
-  rockets: { tex: 'rockets', msg: 'ROCKETS!', size: 2.0, take: () => addAmmo('rocket', 5) },
-  medkit: { tex: 'medkit', msg: 'MEDKIT!', size: 2.1, take: () => addHealth(30, 100) },
-  firstaid: { tex: 'firstaid', msg: 'FIRST AID!', size: 1.7, take: () => addHealth(12, 100) },
-  atomic: { tex: 'atomic', msg: 'ATOMIC HEALTH!', size: 2.2, take: () => addHealth(50, 200), glow: true },
-  armor: { tex: 'armor', msg: 'ARMOR!', size: 2.6, take: () => { if (player.armor >= 100) return false; player.armor = Math.min(100, player.armor + 50); return true; } },
-  medpack: { tex: 'medpack', msg: 'PORTABLE MEDKIT!', size: 2.2, take: () => { if (player.medpack >= 100) return false; player.medpack = 100; return true; } },
-  keyred: { tex: 'keyred', msg: 'RED KEYCARD!', size: 2.0, snd: 'key', glow: true, take: () => { player.keys.red = true; return true; } },
-  wshotgun: { tex: 'wshotgun', msg: 'I GOT THE SHOTGUN!', size: 3.2, snd: 'weapon', take: () => { const n = !player.has[1]; player.has[1] = true; addAmmo('shell', 10); if (n) selectWeapon(1); return true; } },
-  wchain: { tex: 'wchain', msg: 'CHAINGUN CANNON!', size: 3.2, snd: 'weapon', take: () => { const n = !player.has[2]; player.has[2] = true; addAmmo('chain', 50); if (n) selectWeapon(2); return true; } },
+  clip: { tex: 'clip', msg: 'TABANCA MERMİSİ!', size: 1.7, take: () => addAmmo('clip', 24) },
+  shells: { tex: 'shells', msg: 'POMPALI FİŞEĞİ!', size: 2.0, take: () => addAmmo('shell', 10) },
+  cbelt: { tex: 'cbelt', msg: 'MAKİNELİ MERMİSİ!', size: 2.0, take: () => addAmmo('chain', 50) },
+  rockets: { tex: 'rockets', msg: 'ROKETLER!', size: 2.0, take: () => addAmmo('rocket', 5) },
+  medkit: { tex: 'medkit', msg: 'SAĞLIK KİTİ!', size: 2.1, take: () => addHealth(30, 100) },
+  firstaid: { tex: 'firstaid', msg: 'İLK YARDIM!', size: 1.7, take: () => addHealth(12, 100) },
+  atomic: { tex: 'atomic', msg: 'ATOMİK SAĞLIK!', size: 2.2, take: () => addHealth(50, 200), glow: true },
+  armor: { tex: 'armor', msg: 'ZIRH!', size: 2.6, take: () => { if (player.armor >= 100) return false; player.armor = Math.min(100, player.armor + 50); return true; } },
+  medpack: { tex: 'medpack', msg: 'PORTATİF SAĞLIK KİTİ!', size: 2.2, take: () => { if (player.medpack >= 100) return false; player.medpack = 100; return true; } },
+  keyred: { tex: 'keyred', msg: 'KIRMIZI ANAHTAR KART!', size: 2.0, snd: 'key', glow: true, take: () => { player.keys.red = true; return true; } },
+  wshotgun: { tex: 'wshotgun', msg: 'POMPALI BENDE!', size: 3.2, snd: 'weapon', take: () => { const n = !player.has[1]; player.has[1] = true; addAmmo('shell', 10); if (n) selectWeapon(1); return true; } },
+  wchain: { tex: 'wchain', msg: 'MAKİNELİ TOP!', size: 3.2, snd: 'weapon', take: () => { const n = !player.has[2]; player.has[2] = true; addAmmo('chain', 50); if (n) selectWeapon(2); return true; } },
   wrpg: { tex: 'wrpg', msg: 'RPG!', size: 3.4, snd: 'weapon', take: () => { const n = !player.has[3]; player.has[3] = true; addAmmo('rocket', 5); if (n) selectWeapon(3); return true; } },
   wnullstar: {
-    tex: 'wnullstar', msg: 'NULLSTAR ONLINE!  0 - DEPLOY   RMB - SNAP', size: 3.7, snd: 'weapon', glow: true,
+    tex: 'wnullstar', msg: 'SIFIRYILDIZ DEVREDE!  0 - KUR   SAĞ TIK - PATLAT', size: 3.7, snd: 'weapon', glow: true,
     take: () => {
       const n = !player.has[9], got = addAmmo('nullcore', 4);
       if (!n && !got) return false;
       player.has[9] = true;
       if (n) {
         selectWeapon(9);
-        setTimeout(() => { if (state.playing) message('CORE PULLS TARGETS IN - WAIT FOR POWER OR RMB TO SNAP EARLY'); }, 1700);
+        setTimeout(() => { if (state.playing) message('ÇEKİRDEK HEDEFLERİ İÇİNE ÇEKER - GÜÇ DOLSUN YA DA SAĞ TIKLA ERKEN PATLAT'); }, 1700);
       }
       return true;
     }
   },
-  nullcell: { tex: 'nullcell', msg: 'NULLSTAR CORES!', size: 2.1, glow: true, take: () => addAmmo('nullcore', 2) },
+  nullcell: { tex: 'nullcell', msg: 'SIFIRYILDIZ ÇEKİRDEKLERİ!', size: 2.1, glow: true, take: () => addAmmo('nullcore', 2) },
   /* The scope is the reason to carry this over the chaingun, and a player
      who never finds it never finds out. The hint fires once, on the pickup
      that grants the weapon, and never again. */
-  wrifle: { tex: 'wrifle', msg: 'AR-15 TACTICAL!', size: 3.3, snd: 'weapon', take: () => { const n = !player.has[4]; player.has[4] = true; addAmmo('rifle', 60); if (n) { selectWeapon(4); setTimeout(() => { if (state.playing) message('RIGHT MOUSE - SCOPE   J - SUPPRESSOR'); }, 1500); } return true; } },
-  rmag: { tex: 'rmag', msg: '5.56 MAGS!', size: 1.9, take: () => addAmmo('rifle', 30) },
-  wgrenade: { tex: 'wgrenade', msg: 'FRAG GRENADES!  6 - THROW', size: 2.7, snd: 'weapon', take: () => { const n = !player.has[5]; player.has[5] = true; addAmmo('grenade', 9); if (n) selectWeapon(5); return true; } },
+  wrifle: { tex: 'wrifle', msg: 'AR-15 TAKTİK!', size: 3.3, snd: 'weapon', take: () => { const n = !player.has[4]; player.has[4] = true; addAmmo('rifle', 60); if (n) { selectWeapon(4); setTimeout(() => { if (state.playing) message('SAĞ TIK - DÜRBÜN   J - SUSTURUCU'); }, 1500); } return true; } },
+  rmag: { tex: 'rmag', msg: '5.56 ŞARJÖRLER!', size: 1.9, take: () => addAmmo('rifle', 30) },
+  wgrenade: { tex: 'wgrenade', msg: 'EL BOMBALARI!  6 - AT', size: 2.7, snd: 'weapon', take: () => { const n = !player.has[5]; player.has[5] = true; addAmmo('grenade', 9); if (n) selectWeapon(5); return true; } },
   /* ---- fallen enemy weapons -------------------------------------------
      Dropped by the dead, never placed by the level. One rule separates them
      from the armory pickups above: a drop the player cannot use -- weapon
@@ -9968,21 +9995,21 @@ const PICKDEF = {
      ammo grants are deliberately smaller than the placed versions: this is
      a part-used magazine off a body, not a supply crate. */
   dak: {
-    tex: 'dak', msg: 'AK-PATTERN RIFLE!', size: 3.2, snd: 'weapon',
+    tex: 'dak', msg: 'AK TİPİ TÜFEK!', size: 3.2, snd: 'weapon',
     take: () => { const n = !player.has[6], got = addAmmo('ak', 25); if (!n && !got) return false; player.has[6] = true; if (n) selectWeapon(6); return true; }
   },
   dm4: {
-    tex: 'dm4', msg: 'M4-PATTERN CARBINE!', size: 3.2, snd: 'weapon',
+    tex: 'dm4', msg: 'M4 TİPİ KARABİNA!', size: 3.2, snd: 'weapon',
     take: () => { const n = !player.has[7], got = addAmmo('rifle', 25); if (!n && !got) return false; player.has[7] = true; if (n) selectWeapon(7); return true; }
   },
   ddmr: {
-    tex: 'ddmr', msg: 'BOLT DMR!  RIGHT MOUSE - SCOPE', size: 3.3, snd: 'weapon',
+    tex: 'ddmr', msg: 'SÜRGÜLÜ DMR!  SAĞ TIK - DÜRBÜN', size: 3.3, snd: 'weapon',
     take: () => { const n = !player.has[8], got = addAmmo('dmr', 4); if (!n && !got) return false; player.has[8] = true; if (n) selectWeapon(8); return true; }
   },
   dshot: {
     /* the breacher's pump IS the player's shotgun -- same 12 gauge, same
        tube -- so his fallen gun feeds slot 2 rather than inventing a twin */
-    tex: 'dshot', msg: 'COMBAT SHOTGUN!', size: 3.2, snd: 'weapon',
+    tex: 'dshot', msg: 'TAKTİK POMPALI!', size: 3.2, snd: 'weapon',
     take: () => { const n = !player.has[1], got = addAmmo('shell', 4); if (!n && !got) return false; player.has[1] = true; if (n) selectWeapon(1); return true; }
   }
 };
@@ -10160,7 +10187,7 @@ function nullstarContact(n) {
     const dx = e.x + lx * .5 - n.p.x, dy = e.cy() - n.p.y,
       dz = e.z + lz * .5 - n.p.z;
     if (dx * dx + dz * dz > rad * rad || Math.abs(dy) > hh) continue;
-    KILL_BY.wep = 'NULLSTAR'; KILL_BY.enemy = null; lastKillHead = false;
+    KILL_BY.wep = 'SIFIRYILDIZ'; KILL_BY.enemy = null; lastKillHead = false;
     const L = Math.hypot(n.v.x, n.v.y, n.v.z) || 1;
     const hitDir = { x: n.v.x / L, y: n.v.y / L, z: n.v.z / L };
     damageEnemy(e, 28, hitDir, n.p.clone());
@@ -10257,22 +10284,22 @@ function collapseNullstar(n, forced) {
   const radius = lerp(10.5, 22, charge), dmg = lerp(82, 230, charge);
   nullstars.splice(i, 1); freeNullstarMesh(n.mesh);
   spawnNullWave(at, radius * .52);
-  explode(at, radius, dmg, 'NULLSTAR', {
+  explode(at, radius, dmg, 'SIFIRYILDIZ', {
     occluded: true, selfScale: .30, edgeDamage: lerp(4, 14, charge), style: 'nullstar'
   });
-  if (forced && state.playing) message(charge > .82 ? 'NULLSTAR: FULL COLLAPSE' : 'NULLSTAR: CHAIN COLLAPSE');
+  if (forced && state.playing) message(charge > .82 ? 'SIFIRYILDIZ: TAM ÇÖKÜŞ' : 'SIFIRYILDIZ: ZİNCİRLEME ÇÖKÜŞ');
   return true;
 }
 
 function detonateNullstars() {
   if (!nullstars.length) {
-    sfx('empty'); message('NO ACTIVE NULLSTAR CORE');
+    sfx('empty'); message('AKTİF SIFIRYILDIZ ÇEKİRDEĞİ YOK');
     player.cool = Math.max(player.cool, .16);
     return false;
   }
   const live = nullstars.slice();
   for (const n of live) collapseNullstar(n, false);
-  message(live.length > 1 ? 'NULLSTAR: TWIN COLLAPSE' : 'NULLSTAR: SNAP');
+  message(live.length > 1 ? 'SIFIRYILDIZ: ÇİFT ÇÖKÜŞ' : 'SIFIRYILDIZ: ERKEN PATLAMA');
   player.cool = Math.max(player.cool, .18);
   return true;
 }
@@ -10363,7 +10390,7 @@ function updateGrenades(dt) {
     n.t -= dt;
     if (n.t <= 0) {
       scene.remove(n.mesh); n.mat.dispose(); grenades.splice(i, 1);
-      explode(n.p, GRADIUS, GDMG, 'GRENADE');
+      explode(n.p, GRADIUS, GDMG, 'EL BOMBASI');
       continue;
     }
     if (!n.rest) {
@@ -10690,8 +10717,8 @@ const graceHolds = () => graceOn() && graceCell(player.x, player.z);
 function endGrace(fired) {
   if (state.graceT <= 0) return;
   state.graceT = 0;
-  message(fired ? 'YOU STARTED IT' : 'THEY\'RE PUSHING');
-  subtitle('FIND THE RED KEYCARD - REACH THE EXIT', 5200);
+  message(fired ? 'İLK ATEŞİ SEN AÇTIN' : 'ÜSTÜNE GELİYORLAR');
+  subtitle('KIRMIZI ANAHTAR KARTI BUL - ÇIKIŞA ULAŞ', 5200);
 }
 const el = id => document.getElementById(id);
 let ov, ovc, msgT = 0, flashT = 0, flashCol = '#a00000';
@@ -10714,7 +10741,7 @@ function pickFlash() { flashCol = '#d8a018'; flashT = .18; }
    `KILL_BY` is the credit slip: whoever is about to deal damage stamps it, and
    whatever dies reads it. One global rather than a parameter on damageEnemy,
    which is called from four unrelated places. */
-const KIND_NAME = { trooper: 'RIFLEMAN', pig: 'BREACHER', enforcer: 'ASSAULTER', octa: 'MARKSMAN', spider: 'SENTINEL' };
+const KIND_NAME = { trooper: 'TÜFEKÇİ', pig: 'KIRICI', enforcer: 'HÜCUMCU', octa: 'NİŞANCI', spider: 'NÖBETÇİ' };
 function displayName(kind) {
   try {
     if (window.NZ && NZ.enemies && NZ.enemies.displayName && NZ.enemies.displayName[kind])
@@ -10722,8 +10749,8 @@ function displayName(kind) {
   } catch (err) { /* rig is on its own */ }
   return KIND_NAME[kind] || String(kind).toUpperCase();
 }
-const KILL_BY = { wep: 'PISTOL', enemy: null, head: false };
-const ENEMY_WEP = { trooper: 'AK-PATTERN', pig: 'COMBAT SHOTGUN', enforcer: 'M4-PATTERN', octa: 'BOLT DMR', spider: 'ARC LASER' };
+const KILL_BY = { wep: 'TABANCA', enemy: null, head: false };
+const ENEMY_WEP = { trooper: 'AK TİPİ', pig: 'TAKTİK POMPALI', enforcer: 'M4 TİPİ', octa: 'SÜRGÜLÜ DMR', spider: 'ARK LAZERİ' };
 const FEED = [];
 function killFeed(killer, weapon, victim, opts) {
   const host = el('feed'); if (!host) return;
@@ -10732,8 +10759,8 @@ function killFeed(killer, weapon, victim, opts) {
   row.className = 'kf';
   const span = (cls, txt) => { const n = document.createElement('span'); n.className = cls; n.textContent = txt; return n; };
   row.appendChild(span(o.killerYou ? 'you' : 'who', killer));
-  if (o.head) row.appendChild(span('hs', 'HS'));
-  if (o.silent) row.appendChild(span('sil', 'SILENT'));
+  if (o.head) row.appendChild(span('hs', 'KAFA'));
+  if (o.silent) row.appendChild(span('sil', 'SESSİZ'));
   row.appendChild(span('wep', weapon));
   row.appendChild(span(o.victimYou ? 'you' : 'who', victim));
   host.insertBefore(row, host.firstChild);
@@ -10776,7 +10803,7 @@ function buildMissionPicker() {
     b.className = 'skill';
     b.setAttribute('role', 'radio');
     b.setAttribute('aria-checked', n === LEVEL ? 'true' : 'false');
-    b.innerHTML = '<span class="sn"></span><span class="sd">MISSION ' + n + '</span>';
+    b.innerHTML = '<span class="sn"></span><span class="sd">GÖREV ' + n + '</span>';
     b.querySelector('.sn').textContent = m.name;
     b.onmouseenter = () => { el('skilltag').textContent = m.where; };
     b.onmouseleave = () => { el('skilltag').textContent = D.tag; };
@@ -10797,7 +10824,7 @@ function buildSkillPicker() {
     b.type = 'button';
     b.className = 'skill';
     b.setAttribute('role', 'radio');
-    b.innerHTML = '<span class="sn"></span><span class="sd">SKILL ' + (i + 1) + '</span>';
+    b.innerHTML = '<span class="sn"></span><span class="sd">ZORLUK ' + (i + 1) + '</span>';
     b.querySelector('.sn').textContent = s.name;
     b.onclick = () => setSkill(i);
     /* hovering previews the line without committing the choice */
@@ -10851,21 +10878,21 @@ function startGame() {
      architecture owns the opening safety. */
   state.graceT = LEVEL >= 2 ? 0 : D.grace;
   lockMouse();
-  message('LET\'S ROCK');
+  message('HADİ BAKALIM!');
   /* the objective line is not skipped, only deferred: endGrace shows it the
      moment the street closes, so it lands when the player can act on it */
-  if (state.graceT > 0) subtitle('THE STREET IS CLEAR FOR ' + state.graceT + 'S - FIRING ENDS IT', 4600);
-  else subtitle(LEVEL === 2 ? 'ASCEND THE COMPLEX - FIND THE RED KEYCARD' :
-    LEVEL === 3 ? 'BREACH BLACKSTAR - SHUT DOWN THE CORE' :
-      LEVEL === 4 ? 'CLEAR 233. SOKAK - CARD THE CHECKPOINT ON THE CREST AND GET OUT' :
-        'FIND THE RED KEYCARD - REACH THE EXIT', 5200);
+  if (state.graceT > 0) subtitle('SOKAK ' + state.graceT + ' SN BOYUNCA SAKİN - ATEŞ EDERSEN BİTER', 4600);
+  else subtitle(LEVEL === 2 ? 'KOMPLEKSİN TEPESİNE ÇIK - KIRMIZI ANAHTAR KARTI BUL' :
+    LEVEL === 3 ? 'KARAYILDIZ\'A SIZ - ÇEKİRDEĞİ KAPAT' :
+      LEVEL === 4 ? '233. SOKAK\'I TEMİZLE - TEPEDEKİ KONTROL NOKTASINI KARTLA AÇ VE ÇIK' :
+        'KIRMIZI ANAHTAR KARTI BUL - ÇIKIŞA ULAŞ', 5200);
 }
 function togglePause() {
   if (state.ended || !state.booted) return;
   if (state.playing) {
     state.playing = false; state.paused = true;
     mouseDown = false; adsDown = false; altQueued = false;
-    el('pskill').textContent = 'SKILL: ' + D.name;
+    el('pskill').textContent = 'ZORLUK: ' + D.name;
     const saveStatus = el('saveStatus');
     if (saveStatus) { saveStatus.textContent = ''; saveStatus.className = 'save-note'; }
     showScreen('scPause');
@@ -10878,10 +10905,10 @@ function fmtTime(t) {
 }
 function tallyHTML() {
   const acc = totalKills ? Math.round(player.kills / totalKills * 100) : 0;
-  return 'SKILL <span>' + D.name + '</span><br>' +
-    'TIME <span>' + fmtTime(player.time) + '</span><br>' +
-    'ALIENS WASTED <span>' + player.kills + ' / ' + totalKills + '</span> (' + acc + '%)<br>' +
-    'SECRETS FOUND <span>' + player.secrets + ' / 8</span>';
+  return 'ZORLUK <span>' + D.name + '</span><br>' +
+    'SÜRE <span>' + fmtTime(player.time) + '</span><br>' +
+    'İNDİRİLEN DÜŞMAN <span>' + player.kills + ' / ' + totalKills + '</span> (%' + acc + ')<br>' +
+    'BULUNAN GİZLİ YER <span>' + player.secrets + ' / 8</span>';
 }
 function winLevel() {
   if (state.ended) return;
@@ -10892,11 +10919,11 @@ function winLevel() {
   /* Missions one and two roll forward; BLACKSTAR closes the campaign. */
   const win = el('scWin');
   if (LEVEL === MISSIONS.length) {
-    win.querySelector('h1').textContent = 'CAMPAIGN COMPLETE';
-    win.querySelector('h2').textContent = 'THE CORDON IS BROKEN';
+    win.querySelector('h1').textContent = 'KAMPANYA TAMAMLANDI';
+    win.querySelector('h2').textContent = 'ABLUKA YARILDI';
   } else {
-    win.querySelector('h1').textContent = 'MISSION COMPLETE';
-    win.querySelector('h2').textContent = (MISSIONS[LEVEL - 1] || { name: 'MISSION' }).name + ' CLEARED';
+    win.querySelector('h1').textContent = 'GÖREV TAMAMLANDI';
+    win.querySelector('h2').textContent = (MISSIONS[LEVEL - 1] || { name: 'GÖREV' }).name + ' TEMİZLENDİ';
   }
   el('btnNext').style.display = LEVEL === MISSIONS.length ? 'none' : '';
   setTimeout(() => showScreen('scWin'), 500);
@@ -10930,18 +10957,18 @@ function updateHUD(dt) {
   /* The can changes how loud you are and nothing you can see, so its state
      has to be on the HUD or the player cannot tell which mode they are in.
      It hangs off the ammo readout because that is where the eye already is. */
-  const fieldState = w.nullstar && nullstars.length ? '  ' + nullstars.length + ' LIVE' : '';
-  el('amv').textContent = player.ammo[w.ammo] + (suppressed() ? '  SUP' : '') + fieldState;
+  const fieldState = w.nullstar && nullstars.length ? '  ' + nullstars.length + ' AKTİF' : '';
+  el('amv').textContent = player.ammo[w.ammo] + (suppressed() ? '  SUS' : '') + fieldState;
   /* the grace clock sits above the run stats and disappears with the grace.
      Ceil, not floor, so it reads "1" for the last whole second instead of
      sitting on "0" while the street is still closed. */
   const g = state.graceT > 0
-    ? '<i class="g' + (state.graceT <= 5 ? ' hot' : '') + '">CLEAR ' + Math.ceil(state.graceT) + 's</i><br>'
+    ? '<i class="g' + (state.graceT <= 5 ? ' hot' : '') + '">SAKİN ' + Math.ceil(state.graceT) + ' sn</i><br>'
     : '';
   el('stats').innerHTML = g +
-    '<b>T:</b>' + fmtTime(player.time) + '<br>' +
-    '<b>K:</b>' + player.kills + '/' + totalKills + '<br>' +
-    '<b>S:</b>' + player.secrets + '/8';
+    '<b>S:</b>' + fmtTime(player.time) + '<br>' +
+    '<b>L:</b>' + player.kills + '/' + totalKills + '<br>' +
+    '<b>G:</b>' + player.secrets + '/8';
   el('kbA').className = 'keycard' + (player.keys.red ? ' on' : '');
   el('invtxt').textContent = player.medpack > 0 ? player.medpack + '%' : '--';
   el('kbB').className = 'keycard';
@@ -11294,28 +11321,23 @@ function drawMap(w, h) {
   g.fillStyle = '#8fb8ff'; g.font = 'bold 14px monospace';
   g.fillText((MISSIONS[LEVEL - 1] || { name: '' }).name, ox - 6, oy - 18);
   g.font = 'bold 12px monospace';
-  if (LEVEL === 3) {
-    g.fillStyle = '#8a6a30'; g.fillText('COMMAND', ox + bw * sc - 210, oy - 18);
-    g.fillStyle = '#256b5e'; g.fillText('CONDUIT', ox + bw * sc - 132, oy - 18);
-    g.fillStyle = '#2b3d52'; g.fillText('CORE', ox + bw * sc - 56, oy - 18);
-  } else if (LEVEL === 4) {
-    g.fillStyle = '#c2801d'; g.fillText('PARK CREST', ox + bw * sc - 300, oy - 18);
-    g.fillStyle = '#8a6a30'; g.fillText('FIRST FLOOR', ox + bw * sc - 214, oy - 18);
-    g.fillStyle = '#256b5e'; g.fillText('SLOPE', ox + bw * sc - 122, oy - 18);
-    g.fillStyle = '#2b3d52'; g.fillText('STREET', ox + bw * sc - 66, oy - 18);
-  } else if (LEVEL === 2) {
-    g.fillStyle = '#c2801d'; g.fillText('CROWN', ox + bw * sc - 292, oy - 18);
-    g.fillStyle = '#8a6a30'; g.fillText('UPPER WALK', ox + bw * sc - 226, oy - 18);
-    g.fillStyle = '#256b5e'; g.fillText('ARCADE', ox + bw * sc - 134, oy - 18);
-    g.fillStyle = '#2b3d52'; g.fillText('SERVICE', ox + bw * sc - 68, oy - 18);
-  } else {
-    g.fillStyle = '#c2801d'; g.fillText('ROOF', ox + bw * sc - 226, oy - 18);
-    g.fillStyle = '#8a6a30'; g.fillText('UPPER', ox + bw * sc - 180, oy - 18);
-    g.fillStyle = '#2b3d52'; g.fillText('STREET', ox + bw * sc - 124, oy - 18);
-    g.fillStyle = '#1a8a78'; g.fillText('TUNNELS', ox + bw * sc - 60, oy - 18);
+  {
+    /* floor legend, right-aligned by measurement: the Turkish labels do not
+       share the English widths the old fixed offsets were tuned to */
+    const legend = LEVEL === 3 ? [['#8a6a30', 'KOMUTA'], ['#256b5e', 'KANAL'], ['#2b3d52', 'ÇEKİRDEK']]
+      : LEVEL === 4 ? [['#c2801d', 'PARK TEPESİ'], ['#8a6a30', 'BİRİNCİ KAT'], ['#256b5e', 'YOKUŞ'], ['#2b3d52', 'SOKAK']]
+        : LEVEL === 2 ? [['#c2801d', 'TEPE'], ['#8a6a30', 'ÜST GEÇİT'], ['#256b5e', 'PASAJ'], ['#2b3d52', 'SERVİS']]
+          : [['#c2801d', 'ÇATI'], ['#8a6a30', 'ÜST KAT'], ['#2b3d52', 'SOKAK'], ['#1a8a78', 'TÜNELLER']];
+    g.textAlign = 'left';
+    let lx = ox + bw * sc - 14;
+    for (let k = legend.length - 1; k >= 0; k--) {
+      lx -= g.measureText(legend[k][1]).width;
+      g.fillStyle = legend[k][0]; g.fillText(legend[k][1], lx, oy - 18);
+      lx -= 14;
+    }
   }
   g.fillStyle = '#e0c23a';
-  g.fillText('ELEVATION ' + (player.y >= 0 ? '+' : '') + player.y.toFixed(1), ox - 6, oy + bh * sc + 20);
+  g.fillText('YÜKSEKLİK ' + (player.y >= 0 ? '+' : '') + player.y.toFixed(1), ox - 6, oy + bh * sc + 20);
   g.restore();
 }
 
@@ -11422,29 +11444,29 @@ function boot() {
   else clearCampaignLoadout();
   if (window.NZ) NZ.level = LEVEL;
   if (LEVEL === 2) {
-    document.title = 'NUKE ZONE 3D — Mission 2: The Crucible';
+    document.title = 'Seydişehir Çatışma — Görev 2: Er Meydanı';
     for (const sc of ['scLoad', 'scTitle']) {
       const h = el(sc) && el(sc).querySelector('h2');
-      if (h) h.textContent = 'MISSION 2 — THE CRUCIBLE';
+      if (h) h.textContent = 'GÖREV 2 — ER MEYDANI';
     }
     const brief = el('missionBrief');
-    if (brief) brief.innerHTML = 'Climb the tournament complex. Claim its experimental weapon.<br>Find the red keycard in the crown and reach the west exit.';
+    if (brief) brief.innerHTML = 'Turnuva kompleksine tırman. Deneysel silahını ele geçir.<br>Tepedeki kırmızı anahtar kartı bul ve batı çıkışına ulaş.';
   } else if (LEVEL === 3) {
-    document.title = 'NUKE ZONE 3D — Mission 3: Blackstar';
+    document.title = 'Seydişehir Çatışma — Görev 3: Karayıldız';
     for (const sc of ['scLoad', 'scTitle']) {
       const h = el(sc) && el(sc).querySelector('h2');
-      if (h) h.textContent = 'MISSION 3 — BLACKSTAR';
+      if (h) h.textContent = 'GÖREV 3 — KARAYILDIZ';
     }
     const brief = el('missionBrief');
-    if (brief) brief.innerHTML = 'Breach the reactor citadel. Take the stair or core lift to command.<br>Steal the red keycard and shut BLACKSTAR down for good.';
+    if (brief) brief.innerHTML = 'Reaktör kalesine sız. Komutaya merdivenden ya da çekirdek asansörüyle çık.<br>Kırmızı anahtar kartı çal ve KARAYILDIZ\'I sonsuza dek kapat.';
   } else if (LEVEL === 4) {
-    document.title = 'NUKE ZONE 3D — Mission 4: The Cordon';
+    document.title = 'Seydişehir Çatışma — Görev 4: Abluka';
     for (const sc of ['scLoad', 'scTitle']) {
       const h = el(sc) && el(sc).querySelector('h2');
-      if (h) h.textContent = 'MISSION 4 — THE CORDON';
+      if (h) h.textContent = 'GÖREV 4 — ABLUKA';
     }
     const brief = el('missionBrief');
-    if (brief) brief.innerHTML = 'Fight up 233. Sokak in broad daylight. The side streets are barricaded.<br>The red card is in a first-floor flat on 232. Sokak — then breach the checkpoint on the crest.';
+    if (brief) brief.innerHTML = 'Güpegündüz 233. Sokak\'ta yokuş yukarı savaş. Ara sokaklar barikatlı.<br>Kırmızı kart 232. Sokak\'taki birinci kat dairesinde — sonra tepedeki kontrol noktasını yar.';
   }
   const canvas = el('view');
   renderer = new THREE.WebGLRenderer({
@@ -11490,11 +11512,11 @@ function boot() {
   }
 
   const stages = [
-    ['GENERATING TEXTURES...', () => buildTextures()],
-    ['SCULPTING ALIEN SCUM...', () => buildSprites()],
-    ['CARVING LEVEL GEOMETRY...', () => buildMap()],
-    ['BAKING LIGHTMAPS...', () => buildWorld()],
-    ['DEPLOYING HOSTILES...', () => { placeEntities(); finishBoot(); }]
+    ['DOKULAR ÜRETİLİYOR...', () => buildTextures()],
+    ['DÜŞMANLAR YONTULUYOR...', () => buildSprites()],
+    ['HARİTA GEOMETRİSİ OYULUYOR...', () => buildMap()],
+    ['IŞIK HARİTALARI PİŞİRİLİYOR...', () => buildWorld()],
+    ['DÜŞMANLAR KONUŞLANIYOR...', () => { placeEntities(); finishBoot(); }]
   ];
   let i = 0;
   const step = () => {
@@ -11503,7 +11525,7 @@ function boot() {
     el('loadfill').style.width = Math.round((i / stages.length) * 100) + '%';
     setTimeout(() => {
       try { stages[i][1](); }
-      catch (err) { el('loadtxt').textContent = 'ERROR: ' + err.message; console.error(err); return; }
+      catch (err) { el('loadtxt').textContent = 'HATA: ' + err.message; console.error(err); return; }
       i++;
       el('loadfill').style.width = Math.round((i / stages.length) * 100) + '%';
       step();
@@ -11563,19 +11585,19 @@ function finishBoot() {
     startGame();
     if (restoreManualGame(bootManualSave)) {
       togglePause();
-      message(lastRestoreWasCompatible ? 'CHECKPOINT RESTORED' : 'GAME RESTORED');
-      subtitle('MISSION ' + LEVEL + (lastRestoreWasCompatible ? ' — PLAYER PROGRESS RESTORED' : ' — PROGRESS RESTORED'), 3600);
+      message(lastRestoreWasCompatible ? 'KAYIT NOKTASI YÜKLENDİ' : 'OYUN YÜKLENDİ');
+      subtitle('GÖREV ' + LEVEL + (lastRestoreWasCompatible ? ' — OYUNCU İLERLEMESİ YÜKLENDİ' : ' — İLERLEME YÜKLENDİ'), 3600);
       const status = el('saveStatus');
       if (status) {
-        status.textContent = (lastRestoreWasCompatible ? 'CHECKPOINT RESTORED  •  WORLD UPDATED  •  CLICK RESUME' :
-          'GAME RESTORED  •  CLICK RESUME');
+        status.textContent = (lastRestoreWasCompatible ? 'KAYIT NOKTASI YÜKLENDİ  •  DÜNYA GÜNCELLENDİ  •  DEVAM ET DÜĞMESİNE TIKLA' :
+          'OYUN YÜKLENDİ  •  DEVAM ET DÜĞMESİNE TIKLA');
         status.className = 'save-note ok';
       }
     } else {
       state.playing = false; state.paused = false;
       showScreen('scTitle');
       const info = el('continueInfo');
-      if (info) { info.textContent = 'SAVE COULD NOT BE RESTORED'; info.className = 'save-note err'; }
+      if (info) { info.textContent = 'KAYIT YÜKLENEMEDİ'; info.className = 'save-note err'; }
     }
   }
   requestAnimationFrame(frame);

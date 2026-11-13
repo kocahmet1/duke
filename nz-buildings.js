@@ -146,6 +146,28 @@
     geo.attributes.color.needsUpdate = true;
   }
 
+  // PHOTO TRIM. The Blender export keeps the palette it was painted with, and
+  // measured in the 233 Sk corridor against the owner's April 2026 Street View
+  // frames that palette is right for the yellow block and a full stop too
+  // deep for the red one: B-BLOK photographs at 187,152,146 -- a dusty,
+  // chalky salmon barely darker than the cream opposite -- where the export
+  // rendered 153,111,108, a brick red.  These are linear multipliers on the
+  // exported albedo, so the asset itself is untouched and a re-export from
+  // Blender lands on the same trims.  A-BLOK only loses the green cast the
+  // siding picked up (photo 176,165,145).  The glass loses its teal: a pane
+  // over a net curtain reads neutral grey-white on this street, never green.
+  var PHOTO_TRIM = {
+    rose: [1.44, 1.63, 1.58], rose_light: [1.38, 1.52, 1.50], rose_patch: [1.40, 1.58, 1.55],
+    butter: [0.86, 0.82, 0.91], butter_light: [0.86, 0.826, 0.903], siding_seam: [0.86, 0.82, 0.91],
+    glass: [1.12, 0.94, 1.02], glass_light: [1.08, 0.96, 1.02],
+    curtain: [1.10, 1.04, 1.10], curtain_shadow: [1.14, 0.98, 1.04]
+  };
+  function trimmed(name, color) {
+    var k = PHOTO_TRIM[name];
+    if (!k) return color;
+    return [Math.min(color[0] * k[0], 0.92), Math.min(color[1] * k[1], 0.92), Math.min(color[2] * k[2], 0.92)];
+  }
+
   global.NZ_BLENDER_BUILDINGS = {
     install: function (ctx, street, own) {
       var asset = global.NZ_BUILDINGS_ASSET;
@@ -166,8 +188,9 @@
         var kind = surfaceKind(source.material), surface = kind && surfaces[kind];
         if (kind && !surface) surface = surfaces[kind] = makeSurface(THREE, kind, own, anisotropy);
         if (!mat) {
+          var albedo = trimmed(source.material, spec.color);
           mat = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(spec.color[0], spec.color[1], spec.color[2]),
+            color: new THREE.Color(albedo[0], albedo[1], albedo[2]),
             roughness: spec.roughness, metalness: spec.metalness,
             side: source.material === 'glass' || source.material === 'dish' ? THREE.DoubleSide : THREE.FrontSide,
             vertexColors: true, dithering: true,

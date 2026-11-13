@@ -161,7 +161,7 @@ try {
       inScene: !!(nullstars[0] && nullstars[0].mesh.group.parent),
       kind: WPN[player.weapon].name };
   })()`);
-  assert(fireResult.kind === 'NULLSTAR' && fireResult.after === fireResult.before - 1,
+  assert(fireResult.kind === 'SIFIRYILDIZ' && fireResult.after === fireResult.before - 1,
     'primary fire spends one core', fireResult);
   assert(fireResult.live === 1 && fireResult.inScene, 'primary fire creates a live rendered field core', fireResult);
 
@@ -171,7 +171,7 @@ try {
   })()`);
   assert(snapResult.before === 1 && snapResult.ok && snapResult.after === 0,
     'RMB snap path collapses a projectile in flight', snapResult);
-  assert(snapResult.killBy === 'NULLSTAR', 'collapse records NULLSTAR kill credit', snapResult);
+  assert(snapResult.killBy === 'SIFIRYILDIZ', 'collapse records SIFIRYILDIZ (NULLSTAR) kill credit', snapResult);
 
   const damageResult = await evaluate(`(() => {
     const target = enemies.find(e => !e.dead && e.hp > 0);

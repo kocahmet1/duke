@@ -8462,7 +8462,7 @@
      belong to the stock path entirely. Nothing here ever throws.
      ====================================================================== */
   var DISPLAY_NAME = {
-    trooper: 'RIFLEMAN', pig: 'BREACHER', enforcer: 'ASSAULTER', octa: 'MARKSMAN'
+    trooper: 'TÜFEKÇİ', pig: 'KIRICI', enforcer: 'HÜCUMCU', octa: 'NİŞANCI'
   };
 
   var _pubV = null, _pubV2 = null, _pubQ = null;

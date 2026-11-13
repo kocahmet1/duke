@@ -233,21 +233,21 @@ function leave(ws) {
 }
 
 async function join(ws, m) {
-  if (m.proto !== PROTO) { send(ws, { t: 'error', code: 'version', msg: 'This copy of the game is out of date. Refresh the page.' }); return; }
+  if (m.proto !== PROTO) { send(ws, { t: 'error', code: 'version', msg: 'Oyunun bu kopyası eski. Sayfayı yenile.' }); return; }
   if (BUILD !== 'dev' && m.build && m.build !== 'dev' && m.build !== BUILD) {
-    send(ws, { t: 'error', code: 'version', msg: 'The game was updated. Refresh the page to join.' }); return;
+    send(ws, { t: 'error', code: 'version', msg: 'Oyun güncellendi. Katılmak için sayfayı yenile.' }); return;
   }
   const code = String(m.room || '').toUpperCase();
-  if (!ROOM_RE.test(code)) { send(ws, { t: 'error', code: 'room', msg: 'That room code is not valid.' }); return; }
+  if (!ROOM_RE.test(code)) { send(ws, { t: 'error', code: 'room', msg: 'Bu oda kodu geçersiz.' }); return; }
   const level = Math.max(1, Math.min(4, parseInt(m.level, 10) || 2));
   let R = ROOMS.get(code);
   if (!R) {
-    if (ROOMS.size >= 500) { send(ws, { t: 'error', code: 'busy', msg: 'The server is full. Try again later.' }); return; }
+    if (ROOMS.size >= 500) { send(ws, { t: 'error', code: 'busy', msg: 'Sunucu dolu. Daha sonra tekrar dene.' }); return; }
     R = { code, level, peers: new Map(), order: [], host: null, created: Date.now() };
     ROOMS.set(code, R);
     log(`room ${code} opened (mission ${level})`);
   }
-  if (R.level !== level) { send(ws, { t: 'error', code: 'level', level: R.level, msg: `That match is on mission ${R.level}.` }); return; }
+  if (R.level !== level) { send(ws, { t: 'error', code: 'level', level: R.level, msg: `Bu maç ${R.level}. görevde oynanıyor.` }); return; }
   /* a browser re-joining after a dropped socket keeps its id, so its direct
      connections (which never went through here) carry on undisturbed */
   let id = ID_RE.test(m.id || '') ? m.id : null;
@@ -257,7 +257,7 @@ async function join(ws, m) {
     R.peers.delete(id); R.order = R.order.filter(x => x !== id);
   }
   if (!id || R.peers.has(id)) id = crypto.randomBytes(6).toString('hex');
-  if (R.peers.size >= MAX_PLAYERS) { send(ws, { t: 'error', code: 'full', msg: `That match is full (${MAX_PLAYERS} players).` }); return; }
+  if (R.peers.size >= MAX_PLAYERS) { send(ws, { t: 'error', code: 'full', msg: `Bu maç dolu (${MAX_PLAYERS} oyuncu).` }); return; }
   const used = new Set([...R.peers.values()].map(p => p.color));
   let color = 0; while (used.has(color) && color < COLORS - 1) color++;
   const P = { id, name: cleanName(m.name), ws, color, joined: Date.now() };

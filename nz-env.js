@@ -2469,7 +2469,7 @@
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText('SUB-3', o[0] + ts * .5, o[1] + ts * .38);
     g.font = 'bold ' + Math.round(ts * .17) + 'px monospace';
-    g.fillText('NO ENTRY', o[0] + ts * .5, o[1] + ts * .66);
+    g.fillText('GİRİLMEZ', o[0] + ts * .5, o[1] + ts * .66);
     push(7);
 
     /* 8 hazard chevrons */

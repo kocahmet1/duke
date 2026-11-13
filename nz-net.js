@@ -93,7 +93,7 @@
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
   function cleanName(s) { return String(s || '').replace(/[^\p{L}\p{N} ._\-]/gu, '').trim().slice(0, 16); }
-  function wepName(w) { try { return (WPN[w] && WPN[w].name) || 'GUN'; } catch (e) { return 'GUN'; } }
+  function wepName(w) { try { return (WPN[w] && WPN[w].name) || 'SİLAH'; } catch (e) { return 'SİLAH'; } }
 
   /* =====================================================================
      NOT A MULTIPLAYER ROOM: one button on the title screen, nothing else.
@@ -106,11 +106,11 @@
         if (!acts || $('btnMulti')) return;
         var b = document.createElement('button');
         b.className = 'btn'; b.id = 'btnMulti'; b.type = 'button';
-        b.textContent = 'MULTIPLAYER';
+        b.textContent = 'ÇOK OYUNCULU';
         b.onclick = function () {
           if (global.location.protocol === 'file:') {
             var info = $('continueInfo');
-            if (info) { info.textContent = 'MULTIPLAYER NEEDS THE GAME SERVER — RUN  npm run mp  AND OPEN THE ADDRESS IT PRINTS'; info.className = 'save-note err'; }
+            if (info) { info.textContent = 'ÇOK OYUNCULU İÇİN OYUN SUNUCUSU GEREKLİ — npm run mp KOMUTUNU ÇALIŞTIR VE YAZDIĞI ADRESİ AÇ'; info.className = 'save-note err'; }
             return;
           }
           global.location.hash = 'mp=' + randomCode(5) + '&level=2';
@@ -143,7 +143,7 @@
     life: 0, frags: 0, deaths: 0, respawnAt: 0, lastSpawn: -1, seq: 0, sendT: 0, pingT: 0, hudT: 0
   };
   try { ME.name = cleanName(localStorage.getItem(NAME_KEY)) || ''; } catch (e) { }
-  if (!ME.name) ME.name = 'PLAYER ' + (10 + Math.floor(Math.random() * 90));
+  if (!ME.name) ME.name = 'OYUNCU ' + (10 + Math.floor(Math.random() * 90));
 
   var PEERS = {};                /* id -> peer */
   var ICE = [];
@@ -185,7 +185,7 @@
   wrap('saveManualGame', function () {
     return function () {
       var s = $('saveStatus');
-      if (s) { s.textContent = 'NO SAVING IN A MULTIPLAYER MATCH'; s.className = 'save-note err'; }
+      if (s) { s.textContent = 'ÇOK OYUNCULU MAÇTA KAYIT YAPILAMAZ'; s.className = 'save-note err'; }
       return false;
     };
   });
@@ -361,9 +361,9 @@
        whatever the player last chose */
     player.weapon = LOAD_WEAPON; player.pending = -1;
     respawn();
-    message('FIGHT!');
+    message('SAVAŞ!');
     var n = peerCount();
-    subtitle(n ? 'DEATHMATCH — ' + (n + 1) + ' PLAYERS' : 'DEATHMATCH — WAITING FOR PLAYERS. SEND THE LINK!', 4200);
+    subtitle(n ? 'ÖLÜM MAÇI — ' + (n + 1) + ' OYUNCU' : 'ÖLÜM MAÇI — OYUNCU BEKLENİYOR. BAĞLANTIYI GÖNDER!', 4200);
   }
 
   /* ------------------------------------------------------- local death -- */
@@ -377,13 +377,13 @@
     noteDeath(ME.id, k ? k.id : '', k ? k.w : -1, !!(k && k.head));
     try { sfx('dead'); } catch (e) { }
     var who = k && PEERS[k.id] ? PEERS[k.id].name : null;
-    subtitle((who ? 'FRAGGED BY ' + who : 'YOU DIED') + ' — BACK IN ' + RESPAWN_DELAY + 'S', RESPAWN_DELAY * 1000);
+    subtitle((who ? 'SENİ İNDİREN: ' + who : 'ÖLDÜN') + ' — ' + RESPAWN_DELAY + ' SN SONRA GERİ DÖNÜYORSUN', RESPAWN_DELAY * 1000);
     sendStateNow();
   }
 
   function nameOf(id) {
     if (id === ME.id) return ME.name;
-    return PEERS[id] ? PEERS[id].name : 'SOMEONE';
+    return PEERS[id] ? PEERS[id].name : 'BİRİ';
   }
 
   /* Every browser runs this for every death it hears about, its own included,
@@ -397,9 +397,9 @@
     try { player.kills = ME.frags; } catch (e) { }
     try {
       if (fragger) killFeed(nameOf(fragger), wepName(w), nameOf(victim), { killerYou: fragger === ME.id, victimYou: victim === ME.id, head: head });
-      else killFeed('THE ARENA', 'HAZARD', nameOf(victim), { victimYou: victim === ME.id });
+      else killFeed('ARENA', 'TEHLİKE', nameOf(victim), { victimYou: victim === ME.id });
     } catch (e) { }
-    if (fragger === ME.id) { try { message('YOU FRAGGED ' + nameOf(victim)); } catch (e) { } }
+    if (fragger === ME.id) { try { message('İNDİRDİN: ' + nameOf(victim)); } catch (e) { } }
     hudDirty = true;
   }
 
@@ -615,7 +615,7 @@
     var pr = PEERS[id];
     if (pr) { if (name) pr.name = name; if (color !== undefined) pr.color = color; return pr; }
     pr = PEERS[id] = {
-      id: id, name: name || 'PLAYER', color: color | 0, offerer: !!offerer,
+      id: id, name: name || 'OYUNCU', color: color | 0, offerer: !!offerer,
       pc: null, chS: null, chE: null, cands: [], open: false, conn: 'new', route: '', retries: 0, retryT: 0,
       snaps: [], offs: [], offset: null, late: 0.004, gap: 1 / 60, lastT: 0, lastRecv: 0, rtt: 0,
       frags: 0, deaths: 0, hp: 100, av: null, shown: false, life: -1, saidHi: false, joinedAt: nowS()
@@ -637,7 +637,7 @@
     closePC(pr);
     if (pr.av) { try { pr.av.dispose(); } catch (e) { } pr.av = null; }
     delete PEERS[id];
-    if (pr.saidHi) { try { message(pr.name + ' LEFT'); } catch (e) { } }
+    if (pr.saidHi) { try { message(pr.name + ' AYRILDI'); } catch (e) { } }
     hudDirty = true;
     refreshLobby();
   }
@@ -777,7 +777,7 @@
       if (typeof m.name === 'string') pr.name = cleanName(m.name) || pr.name;
       if (typeof m.color === 'number') pr.color = m.color | 0;
       pr.frags = Math.max(0, fin(m.frags) | 0); pr.deaths = Math.max(0, fin(m.deaths) | 0);
-      if (first) { try { message(pr.name + ' JOINED'); } catch (e) { } }
+      if (first) { try { message(pr.name + ' KATILDI'); } catch (e) { } }
       hudDirty = true; refreshLobby();
     } else if (m.t === 'h') onHit(pr, m);
     else if (m.t === 'd') noteDeath(pr.id, typeof m.by === 'string' ? m.by : '', fin(m.w, -1), !!m.hd);
@@ -963,7 +963,7 @@
   }, 1000);
 
   /* ======================================================== signalling == */
-  var SIG = { ws: null, backoff: 800, fatal: false, status: 'connecting', msg: 'CONNECTING TO THE GAME SERVER…' };
+  var SIG = { ws: null, backoff: 800, fatal: false, status: 'connecting', msg: 'OYUN SUNUCUSUNA BAĞLANILIYOR…' };
 
   function sigUrl() {
     var o = routeParam('signal') || global.NZ_NET_SIGNAL;
@@ -979,13 +979,13 @@
     if (SIG.fatal) return;
     if (global.location.protocol === 'file:' && !routeParam('signal')) {
       SIG.fatal = true;
-      setStatus('err', 'MULTIPLAYER NEEDS THE GAME SERVER — RUN  npm run mp  AND OPEN THE ADDRESS IT PRINTS');
+      setStatus('err', 'ÇOK OYUNCULU İÇİN OYUN SUNUCUSU GEREKLİ — npm run mp KOMUTUNU ÇALIŞTIR VE YAZDIĞI ADRESİ AÇ');
       return;
     }
-    if (ROOM.length < 4) { SIG.fatal = true; setStatus('err', 'THAT ROOM CODE IS NOT VALID'); return; }
+    if (ROOM.length < 4) { SIG.fatal = true; setStatus('err', 'BU ODA KODU GEÇERSİZ'); return; }
     var ws;
     try { ws = new WebSocket(sigUrl()); }
-    catch (err) { setStatus('err', 'COULD NOT REACH THE GAME SERVER'); return; }
+    catch (err) { setStatus('err', 'OYUN SUNUCUSUNA ULAŞILAMADI'); return; }
     SIG.ws = ws;
     ws.onopen = function () {
       SIG.backoff = 800;
@@ -999,7 +999,7 @@
       if (SIG.ws === ws) SIG.ws = null;
       if (SIG.fatal) return;
       /* the direct connections do not need this socket; only new arrivals do */
-      setStatus(ME.welcomed ? 'warn' : 'connecting', ME.welcomed ? 'RECONNECTING TO THE GAME SERVER… (THE MATCH CARRIES ON)' : 'CONNECTING TO THE GAME SERVER…');
+      setStatus(ME.welcomed ? 'warn' : 'connecting', ME.welcomed ? 'OYUN SUNUCUSUNA YENİDEN BAĞLANILIYOR… (MAÇ SÜRÜYOR)' : 'OYUN SUNUCUSUNA BAĞLANILIYOR…');
       setTimeout(sigConnect, SIG.backoff);
       SIG.backoff = Math.min(15000, SIG.backoff * 1.8);
     };
@@ -1050,10 +1050,10 @@
         return;
       }
       SIG.fatal = true;
-      setStatus('err', String(m.msg || 'COULD NOT JOIN').toUpperCase());
+      setStatus('err', String(m.msg || 'KATILINAMADI').toLocaleUpperCase('tr-TR'));
       /* already playing (a redeploy happened mid-match): the direct links
          carry on, only newcomers will not find us */
-      if (ME.inMatch) { try { subtitle('THE GAME WAS UPDATED — REFRESH THE PAGE WHEN THIS ROUND IS DONE', 6000); } catch (e) { } }
+      if (ME.inMatch) { try { subtitle('OYUN GÜNCELLENDİ — BU RAUNT BİTİNCE SAYFAYI YENİLE', 6000); } catch (e) { } }
       else enableJoin(false);
       try { if (SIG.ws) SIG.ws.close(); } catch (e) { }
     }
@@ -1112,21 +1112,21 @@
     var mi = 1;
     try { mi = (typeof LEVEL === 'number') ? LEVEL : 2; } catch (e) { }
     var mname = '';
-    try { mname = MISSIONS[mi - 1].name; } catch (e) { mname = 'MISSION ' + mi; }
+    try { mname = MISSIONS[mi - 1].name; } catch (e) { mname = 'GÖREV ' + mi; }
     var h2 = title.querySelector('h2');
-    if (h2) h2.textContent = 'MULTIPLAYER — ' + mname;
+    if (h2) h2.textContent = 'ÇOK OYUNCULU — ' + mname;
     var brief = $('missionBrief');
-    if (brief) brief.innerHTML = 'Deathmatch, up to ' + ROOM_MAX + ' players. Send the link below to a friend: they click it and they are in.<br>' +
-      'No enemies, no pickups &mdash; everyone spawns with the same guns and respawns 3 seconds after dying.';
+    if (brief) brief.innerHTML = 'Ölüm maçı, en fazla ' + ROOM_MAX + ' oyuncu. Aşağıdaki bağlantıyı bir arkadaşına gönder: tıklaması yeterli, maça girer.<br>' +
+      'Düşman yok, toplanacak eşya yok &mdash; herkes aynı silahlarla başlar ve öldükten 3 saniye sonra yeniden doğar.';
     ['missions', 'skills', 'skilltag', 'btnContinue', 'continueInfo'].forEach(function (id) { var n = $(id); if (n) n.style.display = 'none'; });
-    var small = title.querySelector('.small'); if (small) small.textContent = 'ROOM ' + ROOM + ' — THE LINK IS THE INVITE';
+    var small = title.querySelector('.small'); if (small) small.textContent = 'ODA ' + ROOM + ' — DAVETİYE BU BAĞLANTI';
 
     var box = document.createElement('div');
     box.id = 'nzLobby';
     box.innerHTML =
-      '<div class="row"><span class="lbl">INVITE LINK</span><input id="nzLink" readonly spellcheck="false">' +
-      '<button class="btn mini" id="nzCopy" type="button">COPY</button></div>' +
-      '<div class="row"><span class="lbl">YOUR NAME</span><input id="nzName" maxlength="16" spellcheck="false"></div>' +
+      '<div class="row"><span class="lbl">DAVET BAĞLANTISI</span><input id="nzLink" readonly spellcheck="false">' +
+      '<button class="btn mini" id="nzCopy" type="button">KOPYALA</button></div>' +
+      '<div class="row"><span class="lbl">ADIN</span><input id="nzName" maxlength="16" spellcheck="false"></div>' +
       '<div id="nzPlayers"></div>' +
       '<div class="save-note" id="nzStatus" aria-live="polite"></div>';
     var acts = title.querySelector('.menu-actions');
@@ -1134,7 +1134,7 @@
     var link = $('nzLink'); link.value = inviteUrl();
     link.onclick = function () { link.select(); };
     $('nzCopy').onclick = function () {
-      var done = function () { $('nzCopy').textContent = 'COPIED'; setTimeout(function () { $('nzCopy').textContent = 'COPY'; }, 1600); };
+      var done = function () { $('nzCopy').textContent = 'KOPYALANDI'; setTimeout(function () { $('nzCopy').textContent = 'KOPYALA'; }, 1600); };
       try { navigator.clipboard.writeText(link.value).then(done, function () { link.select(); document.execCommand('copy'); done(); }); }
       catch (e) { link.select(); try { document.execCommand('copy'); done(); } catch (e2) { } }
     };
@@ -1145,12 +1145,12 @@
     nm.addEventListener('blur', function () { setName(nm.value); });
 
     var start = $('btnStart');
-    if (start) start.textContent = 'JOIN MATCH';
+    if (start) start.textContent = 'MAÇA KATIL';
     enableJoin(ME.welcomed);
     if (acts) {
       var leave = document.createElement('button');
       leave.className = 'btn'; leave.type = 'button'; leave.id = 'nzLeave';
-      leave.textContent = 'SINGLE PLAYER';
+      leave.textContent = 'TEK OYUNCULU';
       leave.onclick = leaveMatch;
       acts.insertBefore(leave, acts.firstChild);
     }
@@ -1159,11 +1159,11 @@
     if (pause) {
       var sv = $('btnSave'); if (sv) sv.style.display = 'none';
       var pp = pause.querySelector('p');
-      if (pp) pp.innerHTML = 'You are still in the match &mdash; the others can see you.';
+      if (pp) pp.innerHTML = 'Hâlâ maçtasın &mdash; diğerleri seni görebiliyor.';
       var pacts = pause.querySelector('.menu-actions');
       if (pacts) {
         var pl = document.createElement('button');
-        pl.className = 'btn'; pl.type = 'button'; pl.textContent = 'LEAVE MATCH'; pl.onclick = leaveMatch;
+        pl.className = 'btn'; pl.type = 'button'; pl.textContent = 'MAÇTAN AYRIL'; pl.onclick = leaveMatch;
         pacts.insertBefore(pl, pacts.firstChild);
       }
     }
@@ -1175,7 +1175,7 @@
   }
 
   function setName(v) {
-    var n = cleanName(String(v || '').toUpperCase());
+    var n = cleanName(String(v || '').toLocaleUpperCase('tr-TR'));
     if (!n || n === ME.name) { var f = $('nzName'); if (f) f.value = ME.name; return; }
     ME.name = n;
     try { localStorage.setItem(NAME_KEY, n); } catch (e) { }
@@ -1193,9 +1193,9 @@
   }
 
   function routeLabel(pr) {
-    if (pr.open) return (pr.route === 'relay' ? 'RELAYED' : 'DIRECT') + (pr.rtt ? ' ' + Math.round(pr.rtt * 1000) + ' MS' : '');
-    if (pr.conn === 'failed') return pr.retries < 3 && pr.offerer ? 'RETRYING…' : 'NO CONNECTION';
-    return 'CONNECTING…';
+    if (pr.open) return (pr.route === 'relay' ? 'AKTARMALI' : 'DOĞRUDAN') + (pr.rtt ? ' ' + Math.round(pr.rtt * 1000) + ' MS' : '');
+    if (pr.conn === 'failed') return pr.retries < 3 && pr.offerer ? 'YENİDEN DENENİYOR…' : 'BAĞLANTI YOK';
+    return 'BAĞLANIYOR…';
   }
 
   function refreshLobby() {
@@ -1203,7 +1203,7 @@
     var box = $('nzPlayers');
     if (box) {
       var html = '<span class="pl"><span class="sw" style="background:' + COLORS[ME.color % COLORS.length] + '"></span>' + esc(ME.name) +
-        '<span class="st">YOU' + (HOST_ID === ME.id ? ' · HOST' : '') + '</span></span>';
+        '<span class="st">SEN' + (HOST_ID === ME.id ? ' · KURUCU' : '') + '</span></span>';
       for (var id in PEERS) {
         var pr = PEERS[id];
         html += '<span class="pl"><span class="sw" style="background:' + COLORS[pr.color % COLORS.length] + '"></span>' + esc(pr.name) +
@@ -1217,8 +1217,8 @@
       var anyFail = false;
       for (var k in PEERS) if (PEERS[k].conn === 'failed' && !(PEERS[k].retries < 3 && PEERS[k].offerer)) anyFail = true;
       var msg = SIG.msg ||
-        (anyFail ? 'A PLAYER COULD NOT BE REACHED DIRECTLY. THE SERVER NEEDS A RELAY (SEE MULTIPLAYER.MD).' :
-          n ? (n + 1) + ' PLAYERS IN THE ROOM' : 'WAITING FOR A FRIEND — SEND THEM THE LINK. YOU CAN JOIN NOW AND WARM UP.');
+        (anyFail ? 'BİR OYUNCUYA DOĞRUDAN ULAŞILAMADI. SUNUCUNUN BİR AKTARMA (RELAY) SUNUCUSUNA İHTİYACI VAR (MULTIPLAYER.MD DOSYASINA BAK).' :
+          n ? 'ODADA ' + (n + 1) + ' OYUNCU VAR' : 'ARKADAŞIN BEKLENİYOR — ONA BAĞLANTIYI GÖNDER. ŞİMDİ KATILIP ISINABİLİRSİN.');
       st.textContent = msg;
       st.className = 'save-note' + (SIG.status === 'err' || anyFail ? ' err' : SIG.status === 'ok' ? ' ok' : '');
     }
@@ -1234,16 +1234,16 @@
       var stale = nowS() - pr.lastRecv > 2.5;
       rows.push({
         me: false, name: pr.name, color: pr.color, frags: pr.frags, deaths: pr.deaths,
-        ping: pr.open ? (stale ? 'LOST' : (pr.rtt ? Math.round(pr.rtt * 1000) + 'MS' : '…') + (pr.route === 'relay' ? ' R' : '')) : routeLabel(pr),
+        ping: pr.open ? (stale ? 'KOPTU' : (pr.rtt ? Math.round(pr.rtt * 1000) + 'MS' : '…') + (pr.route === 'relay' ? ' R' : '')) : routeLabel(pr),
         bad: !pr.open || stale || pr.rtt > 0.15
       });
     }
     rows.sort(function (a, b) { return b.frags - a.frags || a.deaths - b.deaths; });
-    var html = '<div class="hd">ROOM ' + esc(ROOM) + ' · DEATHMATCH</div>';
+    var html = '<div class="hd">ODA ' + esc(ROOM) + ' · ÖLÜM MAÇI</div>';
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
       html += '<div class="r' + (r.me ? ' me' : '') + (r.bad ? ' bad' : '') + '"><span class="sw" style="background:' + COLORS[r.color % COLORS.length] + '"></span>' +
-        '<span class="nm">' + esc(r.name) + '</span><span class="fr">' + r.frags + '</span><span class="pg">' + esc(r.me ? 'YOU' : r.ping) + '</span></div>';
+        '<span class="nm">' + esc(r.name) + '</span><span class="fr">' + r.frags + '</span><span class="pg">' + esc(r.me ? 'SEN' : r.ping) + '</span></div>';
     }
     hud.innerHTML = html;
   }

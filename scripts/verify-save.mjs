@@ -304,8 +304,8 @@ try {
   })()`, 60000);
   const requiresStreetDestruct = saveLevel === 1;
   if (!written.emptyStart.visible || !written.emptyStart.disabled ||
-      written.emptyStart.label !== 'LOAD LAST CHECKPOINT' || !/NO CHECKPOINT/.test(written.emptyStart.info) ||
-      !written.saved || !written.paused || !/GAME SAVED/.test(written.status) ||
+      written.emptyStart.label !== 'SON KAYDI YÜKLE' || !/HENÜZ KAYIT YOK/.test(written.emptyStart.info) ||
+      !written.saved || !written.paused || !/OYUN KAYDEDİLDİ/.test(written.status) ||
       written.level !== saveLevel || written.hp !== 73 || written.weapon !== 8 ||
       (requiresStreetDestruct && (written.cratesBroken < 1 || written.storedBroken !== written.cratesBroken ||
         written.glassStage < 1 || written.storedGlassStage !== written.glassStage)))
@@ -374,7 +374,7 @@ try {
     };
   })()`, 60000);
   if (!restored.before.visible || restored.before.disabled || restored.before.level !== saveLevel ||
-      restored.before.begin !== 'RESTART MISSION' || !new RegExp(`MISSION ${saveLevel}`).test(restored.before.info) ||
+      restored.before.begin !== 'YENİDEN BAŞLA' || !new RegExp(`GÖREV ${saveLevel}`).test(restored.before.info) ||
       !restored.continuePlaying || restored.fail.length)
     throw new Error(`restore mismatch: ${JSON.stringify(restored)}`);
 

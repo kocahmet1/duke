@@ -724,10 +724,14 @@
   var T_GLASS = m(1.2);    /* 4.20  screens and side glass                 */
   var T_TRIM = m(0.5);     /* 1.75  bumpers, tyres, plastics               */
   var T_BARK = m(0.6);     /* 2.10  trunk fissures at their real pitch     */
-  var T_WALL = m(0.95);    /* 3.33  the flaking garden wall -- the hero.
-                              A 0.30 m kerb sees less than a tenth of a 1.2 m
-                              tile, so the flake pattern never appeared on it;
-                              at 0.95 m a whole flake fits in the height. */
+  var T_WALL = m(1.90);    /* 6.65  the flaking garden wall -- the hero.
+                              Was 0.95 m, which fitted a whole flake in the
+                              wall's height but also laid the SAME flakes down
+                              every 95 cm of a fifty-metre wall, and from
+                              across the street that repeat was the first
+                              thing the eye found.  At 1.90 m the wall's one
+                              metre of height sees half a tile and no patch
+                              comes round again inside six panels. */
   var T_CONC = m(0.6);     /* 2.10  precast: edging, balusters, poles      */
   var T_STEEL = m(0.4);    /* 1.40  a 40 mm rail gets a tenth of a repeat  */
   var T_BRICK = m(0.95);   /* 3.33  8 courses x 4 stretchers to the tile,
@@ -925,60 +929,97 @@
      baked, which is why this set is not shared with anything. */
   BUILD.wallpaint = function () {
     var res = RES.hi, i;
-    /* the patch field: worley blobs at ~250 mm, roughened by two fbm octaves
-       so the flake edge is ragged instead of cellular */
-    var blob = worC(res, { cells: 6, seed: 281, invert: true });
-    var edge = fbmC(res, { octaves: 5, frequency: 14, seed: 282 });
-    var fine = fbmC(res, { octaves: 4, frequency: 42, seed: 283 });
+    /* a quantile of a field: thresholds are set by the SHARE of the wall they
+       should claim, so retuning a noise never silently repaints the street */
+    function quant(f, q) {
+      var c = new Float32Array(f); c.sort();
+      return c[Math.min(c.length - 1, Math.max(0, Math.floor(c.length * q)))];
+    }
+    /* the loss field: blobs at ~150 mm on a 1.9 m tile, broken up by three
+       octaves of fbm so a flake edge is ragged, never cellular */
+    var blob = worC(res, { cells: 13, seed: 281, invert: true });
+    var edge = fbmC(res, { octaves: 5, frequency: 9, seed: 282 });
+    var mid = fbmC(res, { octaves: 4, frequency: 26, seed: 289 });
+    var fine = fbmC(res, { octaves: 4, frequency: 64, seed: 283 });
     var trow = fieldStreak(res, 284, 5, 9, false);          /* float-trowel arcs */
     var trov = fieldStreak(res, 285, 5, 9, true);
-    var crack = fbmC(res, { octaves: 4, frequency: 22, seed: 286, ridged: true });
-    var effl = worC(res, { cells: 12, seed: 287, invert: true });
+    var crack = fbmC(res, { octaves: 4, frequency: 30, seed: 286, ridged: true });
+    var effl = worC(res, { cells: 20, seed: 287, invert: true });
     var grime = fieldStreak(res, 288, 4, 7, true);
 
-    /* paint = 1 where the film survives.  Broad losses expose the pale render,
-       but the muted red remains the field colour between the panel borders. */
-    var paint = fnew(res);
-    for (i = 0; i < paint.length; i++) {
-      var v = blob[i] * 0.62 + edge[i] * 0.30 + fine[i] * 0.08;
-      paint[i] = clamp((v - 0.350) * 7.0, 0, 1);
+    /* paint = 1 where the film survives.  LOSS is the share that has gone:
+       the April 2026 frames show roughly half the field bare between the
+       white panel lines, the 2015 and 2019 ones almost none. */
+    var LOSS = 0.40;
+    var v = fnew(res), paint = fnew(res), c1 = fnew(res), c2 = fnew(res);
+    for (i = 0; i < v.length; i++) {
+      v[i] = blob[i] * 0.22 + edge[i] * 0.46 + mid[i] * 0.24 + fine[i] * 0.08;
+      c1[i] = fine[i] * 0.6 + mid[i] * 0.4;
+      c2[i] = fine[i] * 0.5 + crack[i] * 0.5;
     }
-    /* the lip: within a texel or two of the flake boundary the paint film is
-       lifting and reads as a dark hairline */
-    var lip = fnew(res);
-    var pb = blur2(paint, res, Math.max(1, Math.round(res / 190)));
-    for (i = 0; i < lip.length; i++) lip[i] = clamp(1 - Math.abs(paint[i] - pb[i]) * 6.0, 0, 1);
+    /* every edge is a PAIR of quantiles: a fixed slope on a field whose
+       spread is a few hundredths turned 58% cover into a third of it, all
+       soft-edged spots (the first render of this map was a leopard) */
+    var thA = quant(v, LOSS - 0.025), thB = quant(v, LOSS + 0.025);
+    var t1a = quant(c1, 0.925), t1b = quant(c1, 0.945);
+    var t2a = quant(c2, 0.900), t2b = quant(c2, 0.925);
+    for (i = 0; i < paint.length; i++) {
+      var pv = clamp((v[i] - thA) / (thB - thA || 1e-6), 0, 1);
+      /* small chips out of sound paint, and crumbs of paint left in a loss:
+         a film does not let go along one clean outline */
+      var chip = clamp((c1[i] - t1a) / (t1b - t1a || 1e-6), 0, 1);
+      var crumb = clamp((c2[i] - t2a) / (t2b - t2a || 1e-6), 0, 1);
+      paint[i] = clamp(pv * (1 - chip) + (1 - pv) * crumb * 0.85, 0, 1);
+    }
+    /* the ghost: render that carried paint for thirty years keeps a pink
+       stain for a few millimetres round every surviving patch */
+    var pb = blur2(paint, res, Math.max(1, Math.round(res / 110)));
+    var halo = fnew(res), lip = fnew(res);
+    for (i = 0; i < halo.length; i++) {
+      halo[i] = clamp(pb[i] * 1.6, 0, 1) * (1 - paint[i]);
+      lip[i] = clamp(1 - Math.abs(paint[i] - pb[i]) * 6.0, 0, 1);
+    }
 
     /* substrate: pale grey-white cement render, floated, slightly dirty */
-    var a = albNew(res, [190, 185, 175]);
-    albMul(a, trow, 0, 1, 0.94, 1.06);
+    var a = albNew(res, [196, 189, 180]);
+    albMul(a, trow, 0, 1, 0.95, 1.05);
     albMul(a, trov, 0, 1, 0.97, 1.03);
-    albMul(a, fine, 0, 1, 0.94, 1.06);
-    albTint(a, effl, [212, 210, 204], 0.30, 0.68, 1.0);     /* efflorescence */
-    albTint(a, crack, [138, 134, 126], 0.34, 0.80, 1.0);    /* hairline cracks */
-    /* the oxide-red film on top.  Rendered, the wall came back at sat 0.214
-       against ref1's 0.333 -- the bake's achromatic term costs about half the
-       map's chroma, so the map has to start further out than the photograph. */
-    albTint(a, paint, [130, 58, 56], 0.98, 0.30, 1.0);
+    albMul(a, fine, 0, 1, 0.95, 1.05);
+    albTint(a, effl, [214, 211, 205], 0.26, 0.70, 1.0);     /* efflorescence */
+    albTint(a, crack, [150, 144, 136], 0.16, 0.84, 1.0);    /* hairline cracks */
+    albTint(a, halo, [176, 128, 122], 0.62, 0.0, 1.0);
+    /* THE FILM: an oxide maroon.  The first map carried 130,58,56 and came
+       back from the renderer at 112,74,73 -- salmon -- against 80,33,35 for
+       the same paint in the 2015 frame and 77,51,45 in the 2026 one.  The
+       red was right and the other two channels were sitting on the
+       material's specular floor, so the colour is taken further out here
+       AND MATS.wall gives up half of that floor. */
+    albTint(a, paint, [104, 30, 33], 0.985, 0.25, 1.0);
     /* the film is not uniform either: sun-bleached in patches, darker where
-       it is still sound */
-    albMul(a, blob, 0, 1, 1.07, 0.93);
-    albTint(a, fine, [151, 85, 79], 0.18, 0.62, 1.0);
-    for (i = 0; i < lip.length; i++) {
-      var t = (1 - lip[i]) * 0.55, j = i * 3;
-      if (t <= 0) continue;
-      a[j] *= (1 - t * 0.42); a[j + 1] *= (1 - t * 0.42); a[j + 2] *= (1 - t * 0.42);
+       it is still sound, chalking pink where the binder has gone */
+    albMul(a, blob, 0, 1, 1.08, 0.94);
+    for (i = 0; i < paint.length; i++) {
+      var ck = clamp((fine[i] - 0.62) / 0.38, 0, 1) * paint[i] * 0.16, j = i * 3;
+      if (ck > 0) {
+        a[j] += (142 - a[j]) * ck; a[j + 1] += (66 - a[j + 1]) * ck; a[j + 2] += (62 - a[j + 2]) * ck;
+      }
+      /* the lip of a lifting flake is a soft shadow line, not an ink outline */
+      var t = (1 - lip[i]) * 0.14;
+      if (t > 0) { a[j] *= (1 - t); a[j + 1] *= (1 - t); a[j + 2] *= (1 - t); }
     }
-    albTint(a, grime, [128, 124, 112], 0.20, 0.62, 1.0);
+    albTint(a, grime, [128, 124, 112], 0.16, 0.62, 1.0);
 
     var h = fnew(res), rough = fnew(res);
     for (i = 0; i < h.length; i++) {
-      h[i] = clamp(0.42 + paint[i] * 0.30 + (trow[i] - 0.5) * 0.16 + (fine[i] - 0.5) * 0.10 -
-                   clamp((crack[i] - 0.84) * 6, 0, 1) * 0.22, 0, 1);
+      /* the film stands 0.4 mm proud and that is all: the crack term was 0.22
+         deep, which cavityAO() turned into a net of black lines across both
+         the paint and the render -- crazy paving, where the wall has none */
+      h[i] = clamp(0.46 + paint[i] * 0.16 + (trow[i] - 0.5) * 0.14 + (fine[i] - 0.5) * 0.10 -
+                   clamp((crack[i] - 0.86) * 6, 0, 1) * 0.05, 0, 1);
       /* exposed render is chalky; the surviving enamel is a low satin */
-      rough[i] = clamp(0.94 - paint[i] * 0.26 + (fine[i] - 0.5) * 0.08, 0.28, 1);
+      rough[i] = clamp(0.94 - paint[i] * 0.30 + (fine[i] - 0.5) * 0.08, 0.28, 1);
     }
-    return emitSet(res, a, h, rough, null, 1.05, { mm: 0.9, tile: T_WALL, hp: 240, rough: 0.16 }, 'wallpaint');
+    return emitSet(res, a, h, rough, null, 0.32, { mm: 0.7, tile: T_WALL, hp: 240, rough: 0.16 }, 'wallpaint');
   };
 
   /* ---- the OTHER garden wall: tan facing brick ---------------------------
@@ -1055,10 +1096,14 @@
     var h = fnew(res), rough = fnew(res);
     for (i = 0; i < h.length; i++) {
       h[i] = clamp(0.52 + (agg[i] - 0.5) * 0.34 + (grain[i] - 0.5) * 0.22 -
-                   (1 - form.m[i]) * 0.20 - clamp((chip[i] - 0.86) * 6, 0, 1) * 0.30, 0, 1);
+                   (1 - form.m[i]) * 0.20 - clamp((chip[i] - 0.86) * 6, 0, 1) * 0.16, 0, 1);
       rough[i] = clamp(0.88 + (grain[i] - 0.5) * 0.12, 0.45, 1);
     }
-    return emitSet(res, a, h, rough, null, 1.0, { mm: 1.4, tile: T_CONC, hp: 200, rough: 0.16 }, 'gconc');
+    /* cavity strength 0.45, was 1.0: at full strength every grain of the
+       aggregate got its own dark outline and a white-painted coping read as
+       pebbledash drawn in ink.  Precast is fine-grained; the relief stays in
+       the normal map, where it only shows at grazing light. */
+    return emitSet(res, a, h, rough, null, 0.45, { mm: 1.4, tile: T_CONC, hp: 200, rough: 0.16 }, 'gconc');
   };
 
   /* ---- painted / galvanised steel: railings, masts, wires, bins ----------
@@ -7904,6 +7949,224 @@
     STATS.trees++; STATS.props++;
   }
 
+  /* ---- THE SPRUCE, AS A FORM ----------------------------------------------
+     The owner's April 2026 frames of 233 Sk and of the refuge by the pharmacy
+     show the same plant three times over: a Picea, twelve to thirteen metres,
+     narrow, pointed, its lowest branches gone to about three metres and
+     everything above that a continuous dark cone with a ragged edge.  It is
+     not buildCedar's stack of plates, and it is not buildConifer's thirteen
+     whorls either -- at 30 cm a whorl is one tier per metre of crown and the
+     tree reads as a pagoda with daylight between its floors.
+
+     So this is neither a mesh nor a module-specific builder: it is the FORM,
+     a list of cards in world space, and whoever calls it brings its own atlas
+     and its own tone.  nz-street-props plants the A-BLOK row from it and
+     nz-street-side plants the refuge tree, off the same function, so the two
+     cannot drift into two different species.
+
+       o.x o.y o.z   the foot of the trunk            o.h    total height
+       o.cb          clear stem, above the foot        o.r    widest crown radius
+       o.seed        any number; same seed, same tree  o.dens 1 = full
+       o.axis(y)     optional, returns [x, y, z] of the stem at height y
+
+     What makes it a spruce and not a cone of cards:
+       * a whorl every 31 cm, each turned by the golden angle from the last, so
+         no two tiers line their gaps up and no spoke repeats up the tree;
+       * the branch ANGLE runs with height -- the skirt hangs at 27 degrees
+         below level, the middle is flat, the top third reaches upward -- which
+         is the one silhouette cue that says spruce rather than fir or pine;
+       * every bough is a flattened fan of four sprays -- the inner run, the
+         tip and a side shoot each way -- and under three of them hangs a
+         curtain of pendulous shoots, standing in the spray's own vertical
+         plane.  The fans are what the player sees looking up into the crown
+         from the pavement, the curtains are what makes the edge of the cone
+         from across the street;
+       * short inner shoots between whorls and a near-black cross on the stem
+         at every tier, so the overcast sky never shows through the middle.
+
+     Returns rows of [kind, cx, cy, cz, ux, uy, uz, vx, vy, vz, shade]:
+     kind 0 bough, 1 hanging spray, 2 interior mass, 3 leader.  u runs from
+     the stem outward (or up, for the leader), v is the card's other half
+     axis, and both are HALF extents. */
+  function spruceForm(o) {
+    var out = [], seed = fin(o.seed, 1);
+    function H(a, b) {
+      var s = Math.sin(a * 127.1 + b * 311.7 + seed * 74.7) * 43758.5453;
+      return s - Math.floor(s);
+    }
+    var h = o.h, cb = o.cb, span = h - cb, R = o.r, dens = o.dens || 1;
+    var ax = o.axis || function (y) { return [o.x, y, o.z]; };
+    if (!(span > 1) || !(R > 0.2)) return out;
+    var tiers = Math.max(9, Math.round(span / 1.10 * dens));
+    var dyT = span / tiers, GA = 2.39996323, t, k;
+    for (t = 0; t < tiers; t++) {
+      var q = clamp((t + (H(t, 1) - 0.5) * 0.5) / (tiers - 1), 0, 1);
+      var y = o.y + cb + span * (0.015 + 0.95 * q);
+      var c = ax(y);
+      /* widest a hand above the lowest whorl, then a slightly concave taper:
+         the real outline is fuller than a straight cone in its lower half */
+      var prof = Math.pow(1 - q, 0.80);
+      if (q < 0.07) prof *= 0.80 + 0.20 * (q / 0.07);
+      var Rt = R * prof * (0.82 + 0.32 * H(t, 2));
+      if (H(t, 3) < 0.09) Rt *= 0.60;            /* a whorl that broke back */
+      if (Rt < 0.30) continue;
+      var slope = -0.50 + 0.92 * Math.pow(q, 0.80);
+      var nb = Math.max(4, Math.round((4.2 + 4.4 * (1 - q)) * Math.sqrt(dens)));
+      var a0 = t * GA + H(t, 5) * 0.7;
+      for (k = 0; k < nb; k++) {
+        if (H(t * 31 + k, 6) < 0.06) continue;   /* one bough in sixteen is gone */
+        var an = a0 + k / nb * TAU + (H(t * 17 + k, 7) - 0.5) * 0.55;
+        var L = Rt * (0.78 + 0.36 * H(t * 13 + k, 8));
+        var sl = slope + (H(t * 11 + k, 9) - 0.5) * 0.22;
+        var inv = 1 / Math.sqrt(1 + sl * sl);
+        var bx = Math.cos(an) * inv, by = sl * inv, bz = Math.sin(an) * inv;
+        var yj = y + (H(t * 7 + k, 10) - 0.5) * dyT * 0.95;
+        var sh = (0.58 + 0.48 * q) * (0.86 + 0.28 * H(t * 3 + k, 12));
+        /* A BOUGH IS A FLATTENED FAN, NOT A FEATHER.  One card per branch put
+           a single 1.5 m frond on every spoke and the crown read as a palm
+           from underneath.  Four sprays -- the inner run, the tip, and one
+           side shoot each way off the middle -- give the branched plan a
+           spruce bough actually has, and bring the needle texture down to
+           the scale the photographs show it at. */
+        var SPR = [[0.06, 0.00, 0.50, 0.20, 0.80, 0.00, 0],
+                   [0.46, 0.00, 0.56, 0.19, 1.00, 0.04, 1],
+                   [0.34, 0.62, 0.42, 0.16, 0.94, 0.08, 1],
+                   [0.34, -0.62, 0.42, 0.16, 0.94, 0.08, 1]];
+        for (var j = 0; j < 4; j++) {
+          var S = SPR[j], hj = t * 53 + k * 7 + j;
+          var a2 = an + S[1] * (0.8 + 0.4 * H(hj, 20));
+          var ex = Math.cos(a2), ez = Math.sin(a2);
+          var sl3 = sl - S[5], iv = 1 / Math.sqrt(1 + sl3 * sl3);
+          var ux = ex * iv, uy = sl3 * iv, uz = ez * iv;
+          var s0 = L * S[0], hl = L * S[2] * 0.5, W = L * S[3];
+          var px = c[0] + bx * s0 + ux * hl, py = yj + by * s0 + uy * hl, pz = c[2] + bz * s0 + uz * hl;
+          /* a little roll, so a tier is never one flat disc seen edge on */
+          var roll = (H(hj, 19) - 0.5) * 0.80, cr = Math.cos(roll), sr = Math.sin(roll);
+          var shj = sh * S[4] * (0.92 + 0.16 * H(hj, 21));
+          /* v is chosen so that u x v points UP, so a caller that derives
+             its normal from the card gets the bough's top and its sky bake.
+             (nz-street-side does not: it stores a normal leaning out of the
+             crown instead -- see ncardN() there for why.) */
+          out.push([0, px, py, pz, ux * hl, uy * hl, uz * hl, ez * W * cr, W * sr, -ex * W * cr, shj]);
+          if (S[6]) {
+            /* the curtain of pendulous shoots under it, in the spray's own
+               vertical plane: longest on the skirt, almost nothing at the top */
+            var hang = L * S[2] * (0.60 - 0.30 * q) * (0.70 + 0.60 * H(hj, 13));
+            out.push([1, px, py - hang * 0.45, pz, ux * hl * 0.94, uy * hl * 0.94, uz * hl * 0.94,
+                      0, hang * 0.5, 0, shj * 0.74]);
+          }
+        }
+      }
+      /* the short inner shoots that close the gap between two whorls */
+      var ni = Math.max(3, Math.round(nb * 0.55));
+      for (k = 0; k < ni; k++) {
+        var an2 = a0 + 0.9 + k / ni * TAU + (H(t * 23 + k, 14) - 0.5) * 0.8;
+        var L2 = Rt * (0.42 + 0.22 * H(t * 29 + k, 15));
+        var sl2 = slope * 0.6 + (H(t * 37 + k, 16) - 0.5) * 0.3;
+        var inv2 = 1 / Math.sqrt(1 + sl2 * sl2);
+        var dx2 = Math.cos(an2), dz2 = Math.sin(an2);
+        var y2 = y + dyT * (0.5 + (H(t * 41 + k, 17) - 0.5) * 0.5);
+        var c2 = ax(y2), hl2 = L2 * 0.5;
+        out.push([0, c2[0] + dx2 * inv2 * hl2, y2 + sl2 * inv2 * hl2, c2[2] + dz2 * inv2 * hl2,
+                  dx2 * inv2 * hl2, sl2 * inv2 * hl2, dz2 * inv2 * hl2,
+                  dz2 * L2 * 0.36, L2 * 0.10, -dx2 * L2 * 0.36,
+                  (0.44 + 0.34 * q) * (0.9 + 0.2 * H(t, 18 + k))]);
+      }
+      /* the dark interior: two crossed cards on the stem */
+      if (Rt > 0.9) {
+        var mr = Rt * 0.40, mh = dyT * 1.25, ma = a0 + 0.4;
+        out.push([2, c[0], y, c[2], Math.cos(ma) * mr, 0, Math.sin(ma) * mr, 0, mh, 0, 0.30 + 0.20 * q]);
+        out.push([2, c[0], y, c[2], -Math.sin(ma) * mr, 0, Math.cos(ma) * mr, 0, mh, 0, 0.27 + 0.20 * q]);
+      }
+    }
+    /* the leader: a spruce ends in one shoot, never in a dome */
+    var tp = ax(o.y + h), lh = Math.max(1.2, span * 0.055);
+    out.push([3, tp[0], tp[1] - lh * 0.5, tp[2], 0, lh * 0.62, 0, lh * 0.20, 0, 0, 1.02]);
+    out.push([3, tp[0], tp[1] - lh * 0.5, tp[2], 0, lh * 0.62, 0, 0, 0, lh * 0.20, 0.96]);
+    return out;
+  }
+  /* published at PARSE time, so it is there for nz-street-side whatever this
+     module's own install() goes on to do */
+  NZ.streetFlora = { spruce: spruceForm };
+
+  /* THE SPRUCE'S OWN TONE.  NEEDLE was solved for the old tiers of pale
+     sprigs; the same multiplier on this much card renders a spring green.
+     Measured over the crown, first build against the April 2026 frames:
+         ours   p10 33,45,22   p50 62,77,45
+         photo  p10 14,20,10   p50 33,39,28   (A-BLOK row and the refuge tree)
+     -- a Picea under cloud is very nearly black, and only its outermost
+     sprays carry any green at all.  Linear multipliers on NEEDLE, so the
+     sunny profile's hue shift still passes through. */
+  var SPRUCE_K = [0.36, 0.32, 0.46];
+
+  /* ---- the pavement spruce: spruceForm() on a pit, in this module's own
+     foliage atlas.  Same legality as buildConifer: the stem stands on the
+     pit's S_BLOCK cell (rule C) and no card is allowed below CROWN_BASE
+     (rule B) -- a drooping skirt is lifted clear rather than cut, which is
+     also what a municipal pruning gang does to it. */
+  function buildSpruce(P, pit, seed, hM, opt) {
+    opt = opt || {};
+    var baseY = opt.baseY === undefined ? Y_PAVE : opt.baseY;
+    var topY = baseY + m(hM);
+    var CB = opt.crownBase === undefined ? CROWN_BASE + 0.35 : opt.crownBase;
+    var A = pitAxis(pit), free = !!opt.base;
+    var ax = free
+      ? freeAxis(opt.base.x, baseY, opt.base.z, seed, topY, opt.sway === undefined ? 0.22 : opt.sway)
+      : trunkAxis(pit, seed, topY, m(0.20), 0.20);
+    var i, k;
+    var r0 = m(0.105 + hM * 0.0085) * (opt.trunk || 1);
+
+    P.bark.tile(T_BARK).macro(0.5).tint(opt.bark || BARKC);
+    for (i = 0; i < ax.length - 1; i++) {
+      var u0 = i / (ax.length - 1), u1 = (i + 1) / (ax.length - 1);
+      tube(P.bark, ax[i][0], ax[i][1], ax[i][2], ax[i + 1][0], ax[i + 1][1], ax[i + 1][2],
+           r0 * (1 - u0 * 0.88), 7, 0.92, false, null, r0 * (1 - u1 * 0.88));
+    }
+    /* the snapped-off spurs of the branches it has lost */
+    for (k = 0; k < 8; k++) {
+      var sy = lerp(baseY + m(0.8), CB - 0.4, k / 7) + rr(seed, 40 + k, -0.3, 0.3);
+      var sa = rr(seed, 60 + k, 0, TAU);
+      var sp = axisAt(ax, sy), sl = m(0.14 + rr(seed, 80 + k, 0, 0.16));
+      var ex = sp[0] + Math.cos(sa) * sl, ez = sp[2] + Math.sin(sa) * sl;
+      if (!free) {
+        if (ex < pit.x0 - HUG + 0.2 || ex > pit.x1 + HUG - 0.2) continue;
+        if (A.sgn * (ez - A.zFront) > HUG - 0.25) continue;
+      }
+      tube(P.bark, sp[0], sp[1], sp[2], ex, sy - m(0.05), ez, m(0.020), 4, 0.85, true, null, m(0.011));
+    }
+
+    P.leaf.macro(0);
+    var Rmax = m(0.30 + hM * 0.125) * (opt.spread || 1);
+    var cards = spruceForm({
+      x: ax[0][0], y: baseY, z: ax[0][2], h: topY - baseY, cb: CB - baseY, r: Rmax,
+      seed: seed, dens: TIER === 'low' ? 0.74 : 1,
+      axis: function (y) { return axisAt(ax, y); }
+    });
+    var kc2 = keepClear();
+    var SPR = [L_SPRIG0, L_SPRIG1, L_SPRIG2, L_SPRIG3];
+    var tone = [NEEDLE[0] * SPRUCE_K[0], NEEDLE[1] * SPRUCE_K[1], NEEDLE[2] * SPRUCE_K[2]];
+    for (i = 0; i < cards.length; i++) {
+      var c = cards[i], cy = c[2];
+      if (insideBuilding(c[1], cy, c[3], 0.45)) continue;
+      if (kc2 && c[1] > kc2.x0 - 0.6 && c[1] < kc2.x1 + 0.6 &&
+          c[3] > kc2.z0 - 0.6 && c[3] < kc2.z1 + 0.6) continue;
+      var low = cy - Math.abs(c[5]) - Math.abs(c[8]);
+      if (low < CB) cy += CB - low;
+      var tile = c[0] === 2 ? LEAF.rect[(i & 1) ? L_MASS : L_NEEDLE]
+                            : LEAF.rect[SPR[(rnd(seed + i, 7) * 4) | 0]];
+      card(P.leaf, c[1], cy, c[3], c[4], c[5], c[6], c[7], c[8], c[9], tile, tone, c[10]);
+    }
+    /* an occluder for everything built after it, as buildConifer registers */
+    var span = topY - CB;
+    SELF_OCC.push({
+      x0: ax[ax.length - 1][0] - Rmax * 0.55, x1: ax[ax.length - 1][0] + Rmax * 0.55,
+      y0: CB + span * 0.08, y1: topY - span * 0.22,
+      z0: axisAt(ax, CB + span * 0.5)[2] - Rmax * 0.55,
+      z1: axisAt(ax, CB + span * 0.5)[2] + Rmax * 0.55
+    });
+    STATS.trees++; STATS.props++;
+  }
+
   /* ---- CEDRUS.  The hero tree, and a different plant from buildConifer. ---
      _ref/ref8 and the owner's photographs of the roundabout are a mature
      open-grown cedar, and a cedar is not a cone with fronds stuck on it.  It
@@ -8658,20 +8921,33 @@
 
       /* A-BLOK's surviving white rectangular panel borders are geometry, not
          noise in the paint map.  Their regular rhythm is visible even where
-         most of the red film has flaked away. */
+         most of the red film has flaked away.
+         THE LAYOUT IS THE OWNER'S OWN FRAMES OF THIS WALL (2015, 2019, 2026):
+         a ladder of near-square fields about 55 cm across -- not the 1.5 m
+         bays this first drew -- between two white lines that leave a plain
+         maroon band under the coping and a taller one above the pavement,
+         each field carrying one small white boss at its centre.  A sixth of
+         the bosses have dropped off by 2026 and so have ours. */
       if (side === 'N' && rb - ra > m(0.45)) {
-        var ins = m(0.10), yLo = base + m(0.14), yHi = bodyTop - m(0.10);
-        var band = m(0.035), fa = ra + ins, fb = rb - ins;
-        var zf0 = zHero + hz + m(0.006), zf1 = zf0 + m(0.018);
-        var frameC = [0.72, 0.69, 0.64];
+        var ins = m(0.10), yLo = base + m(0.21), yHi = bodyTop - m(0.17);
+        var band = m(0.042), fa = ra + ins, fb = rb - ins;
+        var zf0 = zHero + hz + m(0.004), zf1 = zf0 + m(0.014);
+        var frameC = [0.93, 0.91, 0.87];
         if (fb > fa + band * 2 && yHi > yLo + band * 2) {
           box6(P.conc, fa, fb, yLo, yLo + band, zf0, zf1, 0.94, frameC);
           box6(P.conc, fa, fb, yHi - band, yHi, zf0, zf1, 0.94, frameC);
-          var panels = Math.max(1, Math.round((fb - fa) / m(1.48))), pi;
+          var panels = Math.max(1, Math.round((fb - fa) / m(0.56))), pi;
           for (pi = 0; pi <= panels; pi++) {
             var px = lerp(fa, fb, pi / panels);
             box6(P.conc, px - band * 0.5, px + band * 0.5, yLo, yHi,
                  zf0, zf1, 0.94, frameC);
+          }
+          var bw = m(0.048), bh = m(0.062), bcy = (yLo + yHi) * 0.5;
+          for (pi = 0; pi < panels; pi++) {
+            if (rnd(4410 + si * 61 + pi, 3) < 0.16) continue;
+            var bx = lerp(fa, fb, (pi + 0.5) / panels);
+            box6(P.conc, bx - bw, bx + bw, bcy - bh, bcy + bh,
+                 zf0, zf1 + m(0.006), 0.94, frameC);
           }
         }
       }
@@ -8682,7 +8958,9 @@
        of drawing a closed collision-looking panel across the threshold. */
     for (gi = 0; gi < gates.length; gi++) {
       var gc = gates[gi], ga2 = gc - gateW * 0.5, gb2 = gc + gateW * 0.5;
-      var pier = m(0.18), postTop = top + m(side === 'N' ? 0.18 : 0.22);
+      /* A-BLOK's gate piers stand head-high in every frame of them, well
+         clear of the wall they close; B-BLOK's brick ones only just do */
+      var pier = m(0.18), postTop = top + m(side === 'N' ? 0.80 : 0.22);
       box6(WP, ga2 - pier, ga2 + pier, base, postTop,
            zHero - hz * 1.45, zHero + hz * 1.45, 1.0, WC);
       box6(WP, gb2 - pier, gb2 + pier, base, postTop,
@@ -8692,7 +8970,8 @@
       box6(P.conc, gb2 - pier - m(0.025), gb2 + pier + m(0.025), postTop, postTop + cope,
            zHero - hz * 1.60, zHero + hz * 1.60, 1.0, CONCT);
       P.steel.tile(T_STEEL).macro(0.36);
-      var gy0 = base + m(0.12), gy1 = top - m(0.10), bars = 4;
+      var gy0 = base + m(0.12), gy1 = side === 'N' ? base + m(1.42) : top - m(0.10);
+      var bars = side === 'N' ? 6 : 4;
       var gateDir = side === 'N' ? -1 : 1;
       var leafLen = gateW * 0.46;
       var hinges = [ga2, gb2], hi;
@@ -8704,6 +8983,15 @@
         for (si = 0; si <= bars; si++) {
           var gz = lerp(zHero + gateDir * m(0.08), zend, si / bars);
           tube(P.steel, hxg, gy0, gz, hxg, gy1, gz, m(0.012), 4, 0.94, false, gateC);
+        }
+        if (side === 'N') {
+          /* the sheet-steel kicking panel that fills the lower part of each
+             leaf, and the mid rail it is welded under */
+          var gym = lerp(gy0, gy1, 0.44);
+          box6(P.steel, hxg - m(0.005), hxg + m(0.005), gy0, gym,
+               Math.min(zHero + gateDir * m(0.08), zend), Math.max(zHero + gateDir * m(0.08), zend),
+               0.94, gateC);
+          tube(P.steel, hxg, gym, zHero, hxg, gym, zend, m(0.018), 4, 0.95, true, gateC);
         }
       }
       var z0p = Math.min(zHero, zDoor), z1p = Math.max(zHero, zDoor);
@@ -8734,18 +9022,24 @@
              });
         box6(P.conc, sx - sw - m(0.018), sx + sw + m(0.018), sBodyTop, sTop,
              szA - sideHz, szB + sideHz, 1.0, CONCT);
-        /* chipped panel borders on the road-facing (west) side */
-        var pBand = m(0.035), pInset = m(0.10), za = szA + pInset, zb = szB - pInset;
-        if (zb > za + pBand * 2) {
-          box6(P.conc, sx - sw - m(0.025), sx - sw - m(0.006), base + m(0.14),
-               sBodyTop - m(0.10), za, za + pBand, 0.94, CONCC);
-          box6(P.conc, sx - sw - m(0.025), sx - sw - m(0.006), base + m(0.14),
-               sBodyTop - m(0.10), zb - pBand, zb, 0.94, CONCC);
-          var pn = Math.max(1, Math.round((zb - za) / m(1.48)));
+        /* the same ladder of white-lined fields on the road-facing (west)
+           side: it is one wall, and it turns the corner without changing */
+        var pBand = m(0.042), pInset = m(0.10), za = szA + pInset, zb = szB - pInset;
+        var pLo = base + m(0.21), pHi = sBodyTop - m(0.17);
+        var pX0 = sx - sw - m(0.018), pX1 = sx - sw - m(0.004), pCol = [0.93, 0.91, 0.87];
+        if (zb > za + pBand * 2 && pHi > pLo + pBand * 2) {
+          box6(P.conc, pX0, pX1, pLo, pLo + pBand, za, zb, 0.94, pCol);
+          box6(P.conc, pX0, pX1, pHi - pBand, pHi, za, zb, 0.94, pCol);
+          var pn = Math.max(1, Math.round((zb - za) / m(0.56)));
           for (var pj = 0; pj <= pn; pj++) {
             var pz = lerp(za, zb, pj / pn);
-            box6(P.conc, sx - sw - m(0.025), sx - sw - m(0.006), base + m(0.14),
-                 sBodyTop - m(0.10), pz - pBand * 0.5, pz + pBand * 0.5, 0.94, CONCC);
+            box6(P.conc, pX0, pX1, pLo, pHi, pz - pBand * 0.5, pz + pBand * 0.5, 0.94, pCol);
+          }
+          for (pj = 0; pj < pn; pj++) {
+            if (rnd(4470 + si * 67 + pj, 3) < 0.16) continue;
+            var bz = lerp(za, zb, (pj + 0.5) / pn);
+            box6(P.conc, pX0 - m(0.006), pX1, (pLo + pHi) * 0.5 - m(0.062), (pLo + pHi) * 0.5 + m(0.062),
+                 bz - m(0.048), bz + m(0.048), 0.94, pCol);
           }
         }
       }
@@ -9920,20 +10214,81 @@
      taking the black pillars, seals or mirror sail with it. */
   var CAR_WINDOWS = [];
   var BLENDER_CAR = [];
+  var CAR_SHADOW = [];
+
+  /* THE COURIER AGAINST THE PHOTOGRAPHS.  Every silver car in the owner's
+     April 2026 and August 2015 frames of this street reads as a MID grey under
+     the overcast -- door panels 115-150 of 255, bright only along the roof and
+     the shoulder -- with a film of road dirt on its lower 30 cm, dark wheels,
+     and a black gap under the sills.  The export rendered its doors at
+     175-190, clean as a showroom, on bright alloys, standing on a road with
+     no shadow under it at all, so it read as pasted on.  k is a linear
+     multiplier on the exported base colour (which is also F0 for the metallic
+     part of the paint, so it takes the mirror down with it); the asset itself
+     is untouched and a re-export lands on the same trims. */
+  var COURIER_TRIM = {
+    silver: { k: 0.60, rough: 0.38, cc: 0.20 },
+    alloy: { k: 0.50, rough: 0.44 }
+  };
+  /* the road film: full at the sill, gone by half a metre up the door */
+  function courierFilm(yM) {
+    var q = clamp((0.52 - yM) / 0.42, 0, 1);
+    q = q * q * (3 - 2 * q);
+    return [1 - 0.30 * q, 1 - 0.32 * q, 1 - 0.37 * q];
+  }
 
   // Blender owns the vehicle geometry; the street still owns placement,
   // materials, disposal, baked illumination and destructible pane records.
   function buildBlenderCourier(S, px, py, pz, yaw, roll, seed) {
     var asset = global.NZ_COURIER_ASSET;
-    var T = mkT(px, py, pz, yaw, roll), N = mkT(0, 0, 0, yaw, roll);
     var sx = S.L / asset.dimensions[0], sy = m(1), sz = m(1);
-    for (var mi = 0; mi < asset.meshes.length; mi++) {
+    var wheels = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], mi, vi;
+    /* where the export's tyres touch the ground, in its own metres */
+    for (mi = 0; mi < asset.meshes.length; mi++) {
+      var sr0 = asset.meshes[mi];
+      if (sr0.material !== 'rubber') continue;
+      for (vi = 0; vi < sr0.positions.length; vi += 3) {
+        if (sr0.positions[vi + 1] >= 0.06) continue;
+        var wk = (sr0.positions[vi] > asset.dimensions[0] * 0.5 ? 1 : 0) + (sr0.positions[vi + 2] > 0 ? 2 : 0);
+        wheels[wk][0] += sr0.positions[vi]; wheels[wk][1] += sr0.positions[vi + 2]; wheels[wk][2]++;
+      }
+    }
+    var contact = [];
+    for (var wq = 0; wq < 4; wq++)
+      if (wheels[wq][2] > 0) contact.push([wheels[wq][0] / wheels[wq][2], wheels[wq][1] / wheels[wq][2]]);
+    /* THE POSE, solved again from those four patches.  buildCars() solves the
+       roll for the procedural fleet, whose local +z is the other flank from
+       the export's, and handed to this asset unchanged it leaned the van INTO
+       the kerb: kerbside tyres 0.4 u inside the kerb stone, roadside tyres
+       floating 0.29 u -- 8 cm -- clear of the road, measured by ray against
+       nz-street-ground's own meshes.  Here each flank's two patches are put
+       on GROUND's surface, the kerbside pair squatting 12 % of the step into
+       its tyres as before, and the roadside pair touching. */
+    if (contact.length === 4) {
+      var T0 = mkT(px, 0, pz, yaw, 0), gP = 0, gN = 0, zP = 0, zN = 0, nP = 0, nN = 0;
+      for (wq = 0; wq < 4; wq++) {
+        var wc = T0(contact[wq][0] * sx, 0, contact[wq][1] * sz), gy = groundYAt(wc[2], wc[0]);
+        if (contact[wq][1] > 0) { gP += gy; zP += contact[wq][1] * sz; nP++; }
+        else { gN += gy; zN += contact[wq][1] * sz; nN++; }
+      }
+      if (nP && nN) {
+        gP /= nP; gN /= nN; zP /= nP; zN /= nN;
+        var srl = clamp((gN - gP) / (zP - zN) * (1 - 0.12), -0.35, 0.35);
+        roll = Math.asin(srl);
+        py = (gP < gN ? gP + zP * srl : gN + zN * srl) - m(0.012);
+      }
+    }
+    var T = mkT(px, py, pz, yaw, roll), N = mkT(0, 0, 0, yaw, roll);
+    for (mi = 0; mi < asset.meshes.length; mi++) {
       var src = asset.meshes[mi], pile = new Pile(1);
-      for (var vi = 0; vi < src.positions.length; vi += 3) {
+      var film = src.material === 'silver';
+      for (vi = 0; vi < src.positions.length; vi += 3) {
         var p = T(src.positions[vi] * sx, src.positions[vi + 1] * sy, src.positions[vi + 2] * sz);
         var n = N(src.normals[vi] / sx, src.normals[vi + 1] / sy, src.normals[vi + 2] / sz);
         var len = Math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]) || 1;
-        pile.vert(p[0], p[1], p[2], n[0] / len, n[1] / len, n[2] / len, 0, 0, 1, 1, 1);
+        var ft = film ? courierFilm(src.positions[vi + 1]) : null;
+        if (ft) pile.vert(p[0], p[1], p[2], n[0] / len, n[1] / len, n[2] / len, 0, 0, ft[0], ft[1], ft[2]);
+        else pile.vert(p[0], p[1], p[2], n[0] / len, n[1] / len, n[2] / len, 0, 0, 1, 1, 1);
       }
       pile.idx = src.indices.slice();
       var rec = { pile: pile, source: src, materialSpec: asset.materials[src.material] };
@@ -9945,16 +10300,105 @@
       }
       BLENDER_CAR.push(rec);
     }
+    CAR_SHADOW.push({ px: px, pz: pz, yaw: yaw, sx: sx, sz: sz, x0: -0.03, x1: asset.dimensions[0] + 0.04,
+                      hw: asset.dimensions[2] * 0.5 - 0.02, wheels: contact });
     STATS.cars++; STATS.props += 4;
+  }
+
+  /* ---- THE CONTACT SHADOW --------------------------------------------------
+     Nothing else can put one under the car.  The street's shading is the sky
+     bake, and the road is baked by nz-street-ground before this module has
+     placed anything on it; the key light's shadow camera is a 102-unit box
+     centred on the player, 540 units away (see the note in section 10).  A
+     parked car on an overcast day stands in the darkest patch of road in the
+     frame: under the sills the ground sees a 15 cm slot of sky, and each
+     tyre sits in its own near-black wedge.  So: one soft rounded-rectangle
+     card, conformed to the road, kerb and pavement it lies on, darkest at
+     the four contact patches, drawn after the ground's own decals
+     (renderOrder 1-3) and before the destruction decals (4).
+     It is an UNLIT darkening, like the soldiers' contact shadows in
+     NUKEM.html: the overcast rig has no direction for it to disagree with. */
+  function carShadowCanvas(rec) {
+    var W = 256, H = 128, c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    var g = c.getContext('2d'), img = g.createImageData(W, H), d = img.data;
+    var mg = 0.40, L0 = rec.x0 - mg, L1 = rec.x1 + mg, Z0 = -rec.hw - mg, Z1 = rec.hw + mg;
+    var cxm = (rec.x0 + rec.x1) * 0.5, hl = (rec.x1 - rec.x0) * 0.5, hw = rec.hw, r = 0.30;
+    function ss(e0, e1, x) { var t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); }
+    for (var y = 0; y < H; y++) {
+      var zz = Z0 + (Z1 - Z0) * (y + 0.5) / H;
+      for (var x = 0; x < W; x++) {
+        var xx = L0 + (L1 - L0) * (x + 0.5) / W;
+        /* signed distance to the body's rounded footprint, metres */
+        var qx = Math.abs(xx - cxm) - (hl - r), qz = Math.abs(zz) - (hw - r);
+        var dist = Math.sqrt(Math.max(qx, 0) * Math.max(qx, 0) + Math.max(qz, 0) * Math.max(qz, 0)) +
+                   Math.min(Math.max(qx, qz), 0) - r;
+        var a = 0.42 * ss(0.36, -0.08, dist) + 0.30 * ss(0.0, -0.55, dist);
+        for (var k = 0; k < rec.wheels.length; k++) {
+          var wx = (xx - rec.wheels[k][0]) / 0.34, wz = (zz - rec.wheels[k][1]) / 0.20;
+          a = Math.max(a, 0.86 * Math.exp(-(wx * wx + wz * wz) * 1.6));
+        }
+        var j = (y * W + x) * 4;
+        d[j] = d[j + 1] = d[j + 2] = 255;
+        d[j + 3] = Math.round(clamp(a, 0, 1) * 255);
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return c;
+  }
+  function meshCarShadows() {
+    for (var ci = 0; ci < CAR_SHADOW.length; ci++) {
+      var rec = CAR_SHADOW[ci], NU = 18, NV = 8, mg = 0.40;
+      var L0 = rec.x0 - mg, L1 = rec.x1 + mg, Z0 = -rec.hw - mg, Z1 = rec.hw + mg;
+      var T = mkT(rec.px, 0, rec.pz, rec.yaw, 0), pos = [], uv = [], idx = [], i, j;
+      for (j = 0; j <= NV; j++) {
+        for (i = 0; i <= NU; i++) {
+          var w = T(lerp(L0, L1, i / NU) * rec.sx, 0, lerp(Z0, Z1, j / NV) * rec.sz);
+          pos.push(w[0], groundYAt(w[2], w[0]) + 0.035, w[2]);
+          uv.push(i / NU, 1 - j / NV);
+        }
+      }
+      for (j = 0; j < NV; j++) {
+        for (i = 0; i < NU; i++) {
+          var a = j * (NU + 1) + i, b = a + 1, c = a + NU + 1, e = c + 1;
+          idx.push(a, c, b, b, c, e);
+        }
+      }
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      geo.computeBoundingSphere();
+      var tex = texCanvas(carShadowCanvas(rec), false, true);
+      var mat = new THREE.MeshBasicMaterial({
+        map: tex, color: 0x101418, transparent: true, opacity: 1, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8, fog: true
+      });
+      mat.name = 'nzprops-car-contact';
+      OWN.mat.push(mat);
+      OWN.geo.push(geo);
+      var mesh = new THREE.Mesh(geo, mat);
+      mesh.name = 'nzprops-car-contact-' + ci;
+      mesh.renderOrder = 3.5;
+      mesh.castShadow = false; mesh.receiveShadow = false;
+      mesh.matrixAutoUpdate = false; mesh.updateMatrix();
+      scene.add(mesh);
+      OWN.obj.push(mesh);
+      STATS.addedCalls++;
+      STATS.tris += idx.length / 3;
+      DIAG.piles.push({ name: mesh.name, tris: idx.length / 3, verts: pos.length / 3, added: true });
+    }
   }
 
   function meshBlenderCourier(bakeOpts) {
     for (var i = 0; i < BLENDER_CAR.length; i++) {
       var rec = BLENDER_CAR[i], s = rec.materialSpec, pane = !!rec.source.window;
+      var tr = pane ? null : COURIER_TRIM[rec.source.material], kc = tr ? tr.k : 1;
       var mat = new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color(s.color[0], s.color[1], s.color[2]),
-        metalness: s.metalness, roughness: s.roughness,
-        clearcoat: rec.source.material === 'silver' ? 0.38 : 0,
+        color: new THREE.Color(s.color[0] * kc, s.color[1] * kc, s.color[2] * kc),
+        metalness: s.metalness, roughness: tr ? Math.max(s.roughness, tr.rough) : s.roughness,
+        clearcoat: rec.source.material === 'silver' ? (tr ? tr.cc : 0.38) : 0,
         clearcoatRoughness: 0.20, vertexColors: true, dithering: true, fog: true,
         transparent: pane, opacity: pane ? s.opacity : 1,
         depthWrite: !pane, side: pane ? THREE.DoubleSide : THREE.FrontSide
@@ -10042,6 +10486,44 @@
       rose: 0, ivy: 0, bin: 0, hose: 0, carpet: 0, balusters: 0, gate: 0 }
   ];
 
+  /* MISSION 4 PLANTS FROM THE OWNER'S 233 Sk FRAME, NOT FROM THE OLD CANYON.
+     PIT_PLAN above was written for six pits on the mission-1 street, where
+     A-BLOK stood on the SOUTH side and a foyer door had a sight line to keep.
+     The cordon has eight pits, the two blocks have changed sides, there is no
+     foyer, and the table was simply being read modulo six -- which put the
+     tallest conifer in front of B-BLOK and a blossom sapling in front of
+     A-BLOK, the reverse of every photograph of this street.
+
+     What the April 2026 frame shows, looking east from the roundabout:
+       LEFT, A-BLOK   a bare street tree on the corner, then three dark
+                      SPRUCES in the garden strip, each three to four storeys
+                      tall and narrow, the first of them just past the first
+                      entrance;
+       RIGHT, B-BLOK  nothing taller than the garden wall for the whole
+                      frontage except one clipped shrub by the first gate, a
+                      lamp column two thirds of the way down, and tall
+                      spruces only beyond the block's east end.
+     Pit order is north-then-x, as above: N 596 / 644 / 700 / 748, then
+     S 612 / 664 / 716 / 752. */
+  var PIT_PLAN_L4 = [
+    { tree: 'bare', h: 5.8, rail: 1, ivy: 1, lamp: 9.4, sign: P_NOPARK, panels: 1,
+      warn: 1, rose: 0, bin: 0, hose: 0, chair: 0, wood: 0, carpet: 0, balusters: 0, gate: 0 },
+    { tree: 'spruce', h: 11.8, rail: 1, ivy: 1, panels: 1,
+      rose: 0, bin: 0, hose: 0, chair: 0, wood: 0, carpet: 0, balusters: 0, gate: 0 },
+    { tree: 'spruce', h: 12.6, rail: 1, wood: 1, pole: 9.6, panels: 1,
+      rose: 0, ivy: 0, bin: 0, hose: 0, chair: 0, carpet: 0, balusters: 0, gate: 0 },
+    { tree: 'spruce', h: 10.4, rail: 1, hose: 1,
+      rose: 0, wood: 0, ivy: 0, bin: 0, chair: 0, carpet: 0, balusters: 0, gate: 0 },
+    { tree: 'shrub', h: 1.9, rail: 2, balusters: 1, rose: 1, ivy: 1, carpet: 1, bin: 1, gate: 1,
+      hose: 0, wood: 0, chair: 0 },
+    { tree: 'none', rail: 2, wood: 1, chair: 1, rose: 1,
+      ivy: 0, bin: 0, hose: 0, carpet: 0, balusters: 0, gate: 0 },
+    { tree: 'bare', h: 5.4, rail: 1, ivy: 1, lamp: 9.0, sign: P_NOPARK,
+      rose: 0, bin: 0, hose: 0, chair: 0, wood: 0, carpet: 0, balusters: 0, gate: 0 },
+    { tree: 'spruce', h: 11.2, rail: 1, hose: 1,
+      rose: 0, wood: 0, ivy: 0, bin: 0, chair: 0, carpet: 0, balusters: 0, gate: 0 }
+  ];
+
   function pitBlocked(pit) {
     /* never plant in the alley passage or in the entrance recess */
     var i, k, cx = (pit.x0 + pit.x1) * 0.5;
@@ -10063,6 +10545,7 @@
   function buildAll() {
     CAR_WINDOWS = [];
     BLENDER_CAR = [];
+    CAR_SHADOW = [];
     PILES = {
       body: new Pile(T_PAINT), glass: new Pile(T_GLASS), trim: new Pile(T_TRIM),
       cabin: new Pile(T_TRIM),
@@ -10108,7 +10591,9 @@
     /* the tree pits: a garden enclosure, a tree, and sometimes a column */
     var skipN = [], skipS = [], anchors = [];
     for (i = 0; i < pits.length; i++) {
-      var pit = pits[i], plan = PIT_PLAN[i % PIT_PLAN.length];
+      var pit = pits[i];
+      var plan = (L4 && pits.length === PIT_PLAN_L4.length)
+        ? PIT_PLAN_L4[i] : PIT_PLAN[i % PIT_PLAN.length];
       if (pitBlocked(pit)) {
         DIAG.legal.push('tree pit at x ' + pit.x0 + ' skipped: it is in a facade gap');
         continue;
@@ -10155,7 +10640,14 @@
           baseY: Y_PAVE, crownBase: CROWN_BASE + 0.6,
           spread: plan.lean ? 0.315 : 0.285, trunk: 0.86, sway: 0.30
         });
+      else if (plan.tree === 'spruce')
+        /* the narrow dark spruce of the A/B corridor */
+        buildSpruce(P, pit, seed, plan.h);
+      else if (plan.tree === 'shrub')
+        buildShrub(P, (pit.x0 + pit.x1) * 0.5, (pit.z0 + pit.z1) * 0.5,
+                   plan.h * 0.58, seed, Y_PAVE + 0.10, plan.h);
       else if (plan.tree === 'bare') buildBareTree(P, pit, seed, plan.h, !!plan.blossom);
+      else if (L4) { /* a planted bed with nothing tall in it */ }
       else DIAG.legal.push('tree pit at x ' + pit.x0 + ' is planted low on purpose: ' +
                            'it stands on the west-end sight line to the entrance');
       (((pit.z0 + pit.z1) * 0.5) < (RZ0 + RZ1) * 0.5 ? skipN : skipS)
@@ -10262,6 +10754,7 @@
       if (wm) MESHES.windows.push(wm);
     }
     meshBlenderCourier(bk);
+    meshCarShadows();
     MESHES.wall = makeMesh(PILES.wall, MATS.wall, 'nzprops-gardenwall', bk);
     MESHES.brick = makeMesh(PILES.brick, MATS.brick, 'nzprops-brickwall', bk);
     MESHES.conc = makeMesh(PILES.conc, MATS.conc, 'nzprops-concrete', bk);
@@ -10342,7 +10835,7 @@
       cabin: cabinMaterial(),
       wire: L4 ? wireMaterial() : null,
       bark: propMaterial('bark', T_BARK, { nrm: 1.00, env: 0.80, metal: 0.0, ao: 1.0, spec: 0.26 }),
-      wall: propMaterial('wallpaint', T_WALL, { nrm: 1.00, env: 0.95, metal: 0.0, ao: 1.0, spec: 0.32 }),
+      wall: propMaterial('wallpaint', T_WALL, { nrm: 1.00, env: 0.86, metal: 0.0, ao: 1.0, spec: 0.16 }),
       /* brick is rougher and matter than render, so it takes less of the
          probe: at env 0.95 the north wall came up a full stop over ref7 */
       brick: propMaterial('gbrick', T_BRICK, { nrm: 1.05, env: 0.80, metal: 0.0, ao: 1.0, spec: 0.28 }),

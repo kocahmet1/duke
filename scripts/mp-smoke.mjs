@@ -111,7 +111,7 @@ try {
     start: document.getElementById('btnStart').textContent,
     title: document.querySelector('#scTitle h2').textContent
   }));
-  check(lobby.link && lobby.link.includes('#mp=' + ROOM) && lobby.start === 'JOIN MATCH', `lobby UI (${lobby.title} / ${lobby.start})`);
+  check(lobby.link && lobby.link.includes('#mp=' + ROOM) && lobby.start === 'MAÇA KATIL', `lobby UI (${lobby.title} / ${lobby.start})`);
 
   /* everyone presses JOIN MATCH */
   for (const p of pages) await p.evaluate(() => { document.getElementById('btnStart').click(); });

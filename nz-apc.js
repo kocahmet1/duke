@@ -140,6 +140,12 @@
      steering. */
   var LANE = 4.2;
 
+  /* The patrol's beat on 233. Sokak ends at the roundabout apron's east edge
+     (grid column 144 ends at x = 580).  pickPatrolGoal never chooses a
+     destination east of it while the crew does not know where the player
+     is -- see THE BEAT there. */
+  var PATROL_EAST_X = 580;
+
   /* ------------------------------------------------------- diagnostics --- */
   var STATS = {
     spawned: 0, routeNodes: 0, routeEdges: 0, routeDropped: 0,
@@ -1756,17 +1762,29 @@
     if (here < 0) return false;
     var avoid = d.prevGoal, i, k;
 
+    /* THE BEAT.  Until the crew has the player, the patrol keeps to the half
+       of the cordon the fight is in: the park, the roundabout and both 232 Sk
+       arms.  East of the roundabout -- the canyon, 230 Sk and the east tail --
+       is the player's walk-in from the spawn, and a car that cruises down to
+       that barricade on its own turns the walk-in into an ambush.  Only the
+       DESTINATION is limited, and only here: a hunt replans with
+       routeToward(), which this never sees, so once they have him the car
+       follows him down the street; the last-resort fallbacks (4.) below are
+       left alone. */
+    var aware = !!(e.ai && e.ai.known && e.ai.kAge < 14);
+    var onBeat = function (n) { return aware || n.x <= PATROL_EAST_X; };
+
     /* the barricades this patrol exists to hold */
     var ends = [];
     for (i = 0; i < ROAD.ends.length; i++) {
       var id = ROAD.ends[i];
-      if (id !== here && id !== avoid && ROAD.nodes[id].ok) ends.push(id);
+      if (id !== here && id !== avoid && ROAD.nodes[id].ok && onBeat(ROAD.nodes[id])) ends.push(id);
     }
     shuffle(ends);
     /* and anywhere else far enough away to be worth the diesel */
     var far = [];
     for (i = 0; i < ROAD.nodes.length; i++) {
-      if (i === here || i === avoid || !ROAD.nodes[i].ok) continue;
+      if (i === here || i === avoid || !ROAD.nodes[i].ok || !onBeat(ROAD.nodes[i])) continue;
       var dx = ROAD.nodes[i].x - e.x, dz = ROAD.nodes[i].z - e.z;
       if (dx * dx + dz * dz >= 90 * 90) far.push(i);
     }
@@ -2977,7 +2995,7 @@
        the AI noise and nz-destruct's scars; a second, smaller one a beat
        later is the ammunition going up. */
     if (G && G.explode) {
-      G.explode({ x: e.x, y: e.y + 5.2, z: e.z }, 34, 96, 'VEHICLE',
+      G.explode({ x: e.x, y: e.y + 5.2, z: e.z }, 34, 96, 'ARAÇ',
         { occluded: true, edgeDamage: 8, selfScale: .55 });
       st.cookOff = .55;
     }
@@ -2993,7 +3011,7 @@
     if (st.cookOff > 0) {
       st.cookOff -= dt;
       if (st.cookOff <= 0 && G && G.explode) {
-        G.explode({ x: e.x + rr(-3, 3), y: e.y + 8.0, z: e.z + rr(-3, 3) }, 22, 46, 'VEHICLE',
+        G.explode({ x: e.x + rr(-3, 3), y: e.y + 8.0, z: e.z + rr(-3, 3) }, 22, 46, 'ARAÇ',
           { occluded: true, edgeDamage: 4, selfScale: .40 });
         st.cookOff = -1;
       }
