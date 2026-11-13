@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SHOT LAUNCHER &mdash; LIVE GAME</title>
+<!--
+  IN-CONTEXT GAMEPLAY
+  -------------------
+  Double-click this file. No query string, no clicks.
+
+  Boots the real game with no title screen, no pointer lock and no audio
+  gesture, then hands the controls to demo.js's scripted director, which walks
+  the street, takes the secret wall, clears the alley and kicks the hotel door
+  in. The framebuffer is pinned to 1600x900 and letterboxed, so a screenshot
+  taken at any window size shows the same field of view.
+
+  The tab title reads "SHOT LIVE" the whole time -- this page never freezes,
+  it is the one page where the critic is meant to grab moving frames. HUD on.
+-->
+<meta http-equiv="refresh" content="2;url=NUKEM.html?shot=game&amp;mode=live&amp;width=1600&amp;height=900&amp;hud=1">
+<script>
+  window.NZ_SHOT = {
+    scene: 'game', mode: 'live',
+    width: 1600, height: 900, hud: true
+  };
+  location.replace('NUKEM.html?shot=game&mode=live&width=1600&height=900&hud=1');
+</script>
+<style>
+  html,body{margin:0;height:100%;background:#08090b;color:#d8a018;
+    font:14px/1.7 "Consolas","DejaVu Sans Mono","Courier New",monospace;
+    display:flex;align-items:center;justify-content:center;text-align:center}
+  a{color:#8fb8ff}
+</style>
+</head>
+<body>
+<div>
+  <div style="font-size:20px;letter-spacing:.2em">LIVE GAME &mdash; SCRIPTED ROUTE</div>
+  <div style="color:#7d858e;margin-top:10px">
+    1600&times;900 letterboxed &middot; HUD on &middot; demo.js director<br>
+    launching&hellip; if nothing happens,
+    <a href="NUKEM.html?shot=game&amp;mode=live&amp;width=1600&amp;height=900&amp;hud=1">open it manually</a><br>
+    tab title stays <b style="color:#d8a018">SHOT LIVE</b> &mdash; screenshot whenever
+  </div>
+</div>
+</body>
+</html>

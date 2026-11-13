@@ -1,0 +1,147 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>ZIRHLI DEVRIYE ARACI - model stage</title>
+<style>html,body{margin:0;background:#20242a;overflow:hidden}canvas{display:block}
+#hud{position:fixed;left:10px;top:8px;font:12px/1.5 monospace;color:#cbd5e0;z-index:9}</style>
+<body><div id="hud"></div>
+<script src="vendor/three.r149.min.js"></script>
+<script>
+/* ===========================================================================
+   nz-apc model stage.  Loads nz-apc.js against a stub of the game globals it
+   binds, builds one vehicle on a flat plate and turns it in front of a
+   three-point rig.  No street, no AI, no NUKEM.html -- so it renders in a
+   fraction of the time the level does, and any fault it shows is the model's.
+   ?view=front34|side|rear34|front|rear|plan|rcws|wheel|eye|low  &turn=1 &dead=1
+   ======================================================================== */
+window.NZ = { level: 4 };
+/* Classic-script top-level const IS visible to another classic script -- the
+   same trick nz-destruct.js uses to reach the game's globals.  A flat, empty
+   world is all the stage needs. */
+const CELL = 4, MW = 216, MH = 128, CLIMB = 1.15;
+const S_SOLID = 0, S_FLOOR = 1, S_DOOR = 2, S_KEY = 3, S_SECRET = 4, S_EXIT = 5, S_BLOCK = 6;
+const grid = new Uint8Array(MW * MH).fill(S_FLOOR);
+const idx = (x, y) => y * MW + x;
+const inb = (x, y) => x >= 0 && y >= 0 && x < MW && y < MH;
+const cellAt = (x, y) => inb(x, y) ? grid[idx(x, y)] : S_SOLID;
+function blockedCell(x, y) { return !inb(x, y) || grid[idx(x, y)] === S_SOLID; }
+function floorAt() { return 0; }
+function ceilAt() { return 52; }
+function canStand() { return true; }
+function highestFloor() { return 0; }
+function moveSlide(px, pz, dx, dz) { return [px + dx, pz + dz]; }
+const enemies = [];
+const player = { x: 200, z: 260, y: 0, alive: true, eyeH: 6 };
+function particle() { return null; }
+function sparkBurst() {}
+function sparkAt() {}
+function sfx() {}
+function aiNoise() {}
+function explode() {}
+function flashLight() {}
+function hurtPlayer() {}
+function shotLineClear() { return true; }
+const AU = { ctx: null, master: null, muted: true };
+</script>
+<script src="nz-core.js"></script>
+<script src="nz-apc.js"></script>
+<script>
+const Q = new URLSearchParams(location.search);
+const VIEW = Q.get('view') || 'front34';
+const TURN = Q.get('turn') === '1', DEAD = Q.get('dead') === '1';
+const W = +(Q.get('w') || 900), H = +(Q.get('h') || 620);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H);
+if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
+else renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x2b3138);
+const camera = new THREE.PerspectiveCamera(34, W / H, 0.5, 4000);
+
+/* an overcast three-point rig, near enough to the cordon's own daylight that
+   a value judged here holds up in the level */
+scene.add(new THREE.HemisphereLight(0xbdd4f0, 0x3a352b, 1.05));
+const key = new THREE.DirectionalLight(0xfff0d8, 2.05);
+key.position.set(210, 260, 150); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -42; key.shadow.camera.right = 42;
+key.shadow.camera.top = 42; key.shadow.camera.bottom = -42;
+key.shadow.camera.near = 120; key.shadow.camera.far = 460;
+key.shadow.bias = -0.0009;
+key.target.position.set(200, 4, 200); scene.add(key); scene.add(key.target);
+const fill = new THREE.DirectionalLight(0x9fc0ff, 0.55); fill.position.set(120, 60, 260); scene.add(fill);
+const rim  = new THREE.DirectionalLight(0xffd9a8, 0.62); rim.position.set(150, 30, 120); scene.add(rim);
+
+const plate = new THREE.Mesh(new THREE.CircleGeometry(95, 64),
+  new THREE.MeshStandardMaterial({ color: 0x4a4d50, roughness: .95, metalness: .05 }));
+plate.rotation.x = -Math.PI / 2; plate.position.set(200, 0, 200);
+plate.receiveShadow = true; scene.add(plate);
+const gh = new THREE.GridHelper(150, 37, 0x5d6268, 0x3c4045);
+gh.position.set(200, 0.02, 200); scene.add(gh);
+
+NZ.ctx = { renderer, scene, camera, THREE, enemyFootGround: () => 0 };
+NZ.call('rendererInit', NZ.ctx);
+NZ.call('ready', NZ.ctx);
+
+const cfg = { h: 9.62, w: 19.6, rad: 4.9, spd: 44, stride: 12, hp: 420,
+  ai: { close: 34, far: 168, move: .0009 }, zone: {}, mechanical: true };
+const e = {
+  kind: 'apc', cfg, uid: 0, x: 200, z: 200, y: 0, face: 0, hp: 420, dead: false,
+  vx: 0, vz: 0, gait: 0, speedSm: .4, turnV: 0, recoilT: 0, hitT: 0, muzzlePulse: 0,
+  aimYaw: .55, aimPitch: .12, state: 'chase', wander: 1.1, lean: 0, crouch: 0,
+  ai: { known: true, see: true, kAge: 0, alert: 1, kx: 200, ky: 6, kz: 260, aimY: .55, aimP: .12 },
+  cy() { return this.y + cfg.h * .5; }, hh() { return cfg.h * .5; },
+  mesh: null, glow: null, tell: null, shadow: null
+};
+enemies.push(e);
+const rig = NZ.first('createEnemyRig', e);
+document.getElementById('hud').textContent =
+  rig ? ('rig OK  hull meshes=' + rig.hullMeshes.length + '  view=' + VIEW) : 'RIG FAILED';
+if (!rig) throw new Error('rig failed');
+e.rig = rig; e.rigActive = true;
+
+/* azimuth from the nose, elevation, distance, aim height, fov */
+const VIEWS = {
+  front34: [ 40,  9, 42, 4.2, 30], side:   [ 90,  4, 46, 4.4, 28],
+  rear34:  [145,  9, 42, 4.2, 30], front:  [  0,  5, 44, 4.4, 28],
+  rear:    [180,  5, 44, 4.4, 28], plan:   [ 90, 66, 48, 3.0, 34],
+  rcws:    [125, 20, 21, 8.4, 30], wheel:  [ 62,  6, 17, 2.6, 34],
+  eye:     [ 55,  7, 26, 3.4, 62], low:    [ 30,  1, 27, 2.0, 40]
+};
+const V = VIEWS[VIEW] || VIEWS.front34;
+function place(t) {
+  const az = (V[0] + (TURN ? t * 26 : 0)) * Math.PI / 180, el = V[1] * Math.PI / 180, d = V[2];
+  camera.fov = V[4]; camera.updateProjectionMatrix();
+  camera.position.set(e.x + Math.sin(az) * Math.cos(el) * d,
+    e.y + V[3] + Math.sin(el) * d, e.z + Math.cos(az) * Math.cos(el) * d);
+  camera.lookAt(e.x, e.y + V[3], e.z);
+}
+
+const t0 = performance.now();
+let frames = 0;
+function frame() {
+  const now = (performance.now() - t0) * .001;
+  e.gait = now * 1.4;
+  e.aimYaw = e.face + Math.sin(now * .5) * .55;
+  e.aimPitch = .10 + Math.sin(now * .33) * .10;
+  for (let i = 0; i < 4; i++) rig.wheels[i].spin = now * 2.2;
+  /* presentEnemyDeath owns e.deathT in the game and nz-apc times the whole
+     wreck off it, so the stage has to advance it too or the paint never
+     burns and the fire never starts. */
+  if (DEAD) { e.dead = true; e.deathT = now;
+    NZ.first('animateEnemyRigDeath', e, Math.min(1, now / 1.2), Math.min(1, now / 1.2)); }
+  else NZ.first('animateEnemyRig', e, 0, now);
+  place(now);
+  renderer.render(scene, camera);
+  window.__viewFrames = ++frames;
+  window.__want = DEAD ? 14 : 3;
+  requestAnimationFrame(frame);
+}
+frame();
+window.__viewReady = true;
+</script>

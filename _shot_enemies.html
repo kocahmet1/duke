@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SHOT LAUNCHER &mdash; ENEMIES</title>
+<!--
+  ENEMY CONTACT SHEET
+  -------------------
+  Double-click this file. No query string, no clicks.
+
+  Every enemy type gets two cells:
+    "<kind> LOD"     three instances of the same creature at 8 / 19 / 36 m in
+                     one frame, so close, mid and far read side by side.
+    "<kind> action"  a held mid-attack pose (arms up, muzzle tell lit).
+  Cell 9 lines all four kinds up at one distance as a scale reference.
+
+  The level's own spawns are removed, the AI is blinded so nothing walks into
+  frame, and a neutral key/rim/hemi rig is added over the staging area so the
+  creature art is judged on its own rather than on the level's night lighting.
+
+  Wait for the tab title to read "SHOT READY", then screenshot.
+-->
+<meta http-equiv="refresh" content="2;url=NUKEM.html?shot=enemies&amp;mode=grid&amp;width=1920&amp;height=1080&amp;ss=2&amp;warm=16&amp;settle=16&amp;prewarm=60&amp;fov=55&amp;lights=1&amp;hud=0">
+<script>
+  window.NZ_SHOT = {
+    scene: 'enemies', mode: 'grid',
+    width: 1920, height: 1080, ss: 2,
+    warm: 16, settle: 16, prewarm: 60, fov: 55, lights: true, hud: false
+  };
+  location.replace('NUKEM.html?shot=enemies&mode=grid&width=1920&height=1080' +
+                   '&ss=2&warm=16&settle=16&prewarm=60&fov=55&lights=1&hud=0');
+</script>
+<style>
+  html,body{margin:0;height:100%;background:#08090b;color:#d8a018;
+    font:14px/1.7 "Consolas","DejaVu Sans Mono","Courier New",monospace;
+    display:flex;align-items:center;justify-content:center;text-align:center}
+  a{color:#8fb8ff}
+</style>
+</head>
+<body>
+<div>
+  <div style="font-size:20px;letter-spacing:.2em">ENEMY CONTACT SHEET</div>
+  <div style="color:#7d858e;margin-top:10px">
+    trooper / pig / enforcer / octa &middot; LOD + action + scale &middot; neutral rig<br>
+    launching&hellip; if nothing happens,
+    <a href="NUKEM.html?shot=enemies&amp;mode=grid&amp;width=1920&amp;height=1080&amp;ss=2&amp;warm=16&amp;settle=16&amp;prewarm=60&amp;fov=55&amp;lights=1&amp;hud=0">open it manually</a><br>
+    screenshot once the tab title reads <b style="color:#d8a018">SHOT READY</b>
+  </div>
+</div>
+</body>
+</html>

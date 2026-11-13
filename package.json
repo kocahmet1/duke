@@ -1,0 +1,31 @@
+{
+  "name": "nuke-zone-3d",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node build-static.mjs",
+    "dev": "node scripts/serve-game.mjs",
+    "mp": "node server/mp-server.mjs",
+    "start": "node server/mp-server.mjs --dist",
+    "check:level": "node scripts/validate-level.mjs",
+    "check:game": "node scripts/validate-game.mjs",
+    "check:enemies": "node scripts/enemy-harness.mjs",
+    "shot": "node scripts/render-level.mjs",
+    "test": "npm run check:level && npm run check:game",
+    "check:destruct": "node scripts/verify-destruct.mjs",
+    "check:glass": "node scripts/verify-hero-glass.mjs",
+    "check:car-glass": "node scripts/verify-car-glass.mjs",
+    "check:save": "node scripts/verify-save.mjs",
+    "check:mp": "node scripts/mp-smoke.mjs"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^23.11.1"
+  }
+}

@@ -1,0 +1,592 @@
+{
+  "ok": true,
+  "meta": {
+    "threeRevision": "149",
+    "installMs": 7777,
+    "frames": 1020,
+    "commit": "e524d6f",
+    "files": {
+      "nz-enemies.js": {
+        "bytes": 116623,
+        "hash": "dff5f765"
+      },
+      "nz-core.js": {
+        "bytes": 18948,
+        "hash": "4a75af56"
+      },
+      "NUKEM.html": {
+        "bytes": 249157,
+        "hash": "889cc734"
+      }
+    },
+    "when": "2026-08-02T20:55:07.478Z",
+    "c3": [],
+    "displayName": null,
+    "thresholds": {
+      "footSkate": 0.0035,
+      "footPenetrate": 0.0175,
+      "footFloat": 0.0175,
+      "kneeInversion": 0,
+      "kneeMinDeg": 0,
+      "kneeMaxDeg": 150,
+      "supportHand": 0.07,
+      "triggerHand": 0.0525,
+      "nonFinite": 0,
+      "weaponOALPct": 5,
+      "elbowInTorso": 0,
+      "strideCohPct": 12
+    },
+    "weaponSpec": {
+      "trooper": {
+        "name": "AK-pattern AR",
+        "mm": 880,
+        "units": 3.08
+      },
+      "enforcer": {
+        "name": "M4-pattern AR",
+        "mm": 840,
+        "units": 2.94
+      },
+      "pig": {
+        "name": "combat shotgun",
+        "mm": 1005,
+        "units": 3.52
+      },
+      "octa": {
+        "name": "bolt DMR",
+        "mm": 1160,
+        "units": 4.06
+      }
+    }
+  },
+  "kinds": [
+    {
+      "kind": "trooper",
+      "error": null,
+      "frames": 1020,
+      "metrics": [
+        {
+          "id": "nonFinite",
+          "label": "non-finite bone matrix values",
+          "status": "PASS",
+          "value": 0,
+          "threshold": 0,
+          "kind": "trooper"
+        },
+        {
+          "id": "footSkate",
+          "label": "foot skate (planted, per frame)",
+          "status": "FAIL",
+          "value": 0.12422985852094057,
+          "threshold": 0.0035,
+          "kind": "trooper",
+          "bone": "footL",
+          "worstFrame": 293,
+          "seg": "walk",
+          "p50": 0.0011202215813305016,
+          "p95": 0.032190744188953666,
+          "replantSnap": 0.21522403070162877,
+          "replantSnapFrame": 546,
+          "detail": "peak 35.5 mm/frame, median 0.32 mm, p95 9.2 mm over 645 planted frames. footL swing clearance 0.310u, stance duty 70%. Touchdown/toe-off frames excluded; including them the worst jump is 61.5 mm at frame 546 (sprint) -- that number is the re-plant snap, not the plant lock. A high median means the whole stance slides; a low median with a high peak means a single re-plant."
+        },
+        {
+          "id": "footPenetrate",
+          "label": "foot ground penetration",
+          "status": "FAIL",
+          "value": 0.1759261183134414,
+          "threshold": 0.0175,
+          "kind": "trooper",
+          "bone": "footL",
+          "worstFrame": 544,
+          "seg": "sprint",
+          "detail": "50.3 mm below the floor plane"
+        },
+        {
+          "id": "footFloat",
+          "label": "foot float during stance",
+          "status": "FAIL",
+          "value": 0.03438189818869648,
+          "threshold": 0.0175,
+          "kind": "trooper",
+          "bone": "footR",
+          "worstFrame": 430,
+          "seg": "strafe",
+          "detail": "9.8 mm above the floor while planted; swing clearance footR 0.435u over 484 stance frames"
+        },
+        {
+          "id": "strideCoherence",
+          "label": "stride vs distance travelled",
+          "status": "PASS",
+          "value": 1.6915456306347831,
+          "threshold": 12,
+          "kind": "trooper",
+          "bone": "footR",
+          "worstFrame": 551,
+          "seg": "sprint",
+          "detail": "8 strides covering 23.23u while the body travelled 23.63u (ratio 0.983; 1.000 = perfectly phase-locked)"
+        },
+        {
+          "id": "kneeInversion",
+          "label": "knee inversion / hyperextension events",
+          "status": "PASS",
+          "value": 0,
+          "threshold": 0,
+          "kind": "trooper",
+          "detail": "flexion range L 7.3-135.3 deg, R 7.3-135.9 deg (legal 0-150)"
+        },
+        {
+          "id": "elbowInTorso",
+          "label": "elbow inside torso capsule",
+          "status": "PASS",
+          "value": 0,
+          "threshold": 0,
+          "kind": "trooper",
+          "detail": "5-slice elliptical torso hull built from the mesh"
+        },
+        {
+          "id": "supportHand",
+          "label": "support hand -> handguard",
+          "status": "PASS",
+          "value": 0.03995322551413966,
+          "threshold": 0.07,
+          "kind": "trooper",
+          "worstFrame": 287,
+          "bone": "handL",
+          "seg": "walk",
+          "median": 0.039953225514137436,
+          "gripSource": "inferred-from-weapon-geometry",
+          "detail": "worst 11 mm, median 11 mm; grip point source: inferred-from-weapon-geometry. The grip point is a centroid inferred from the weapon vertex cloud (support = 48-72% along the barrel axis, trigger = rear 16-36% below the bore). For an exact measurement, parent an Object3D named \"grip_support\" and \"grip_trigger\" under the weapon bone at the real contact points; the harness picks named anchors over inference automatically."
+        },
+        {
+          "id": "triggerHand",
+          "label": "trigger hand -> pistol grip",
+          "status": "FAIL",
+          "value": 0.10502543360162236,
+          "threshold": 0.0525,
+          "kind": "trooper",
+          "worstFrame": 400,
+          "bone": "handR",
+          "seg": "strafe",
+          "median": 0.10502543360161941,
+          "gripSource": "inferred-from-weapon-geometry",
+          "detail": "worst 30 mm, median 30 mm; grip point source: inferred-from-weapon-geometry. The grip point is a centroid inferred from the weapon vertex cloud (support = 48-72% along the barrel axis, trigger = rear 16-36% below the bore). For an exact measurement, parent an Object3D named \"grip_support\" and \"grip_trigger\" under the weapon bone at the real contact points; the harness picks named anchors over inference automatically."
+        },
+        {
+          "id": "weaponOAL",
+          "label": "weapon overall length vs spec",
+          "status": "FAIL",
+          "value": 44.2942418600657,
+          "threshold": 5,
+          "kind": "trooper",
+          "bone": "weapon",
+          "measured": 1.7157373507099765,
+          "worldScale": 1.0033548387096773,
+          "detail": "measured 1.716u (490 mm) along local z; spec AK-pattern AR 3.08u (880 mm). Bind extent 1.710 x median weapon-bone world scale 1.0034; 134 verts skinned to the weapon bone. SCALE is 3.5 world units per metre."
+        }
+      ],
+      "boneCount": 22,
+      "gripSource": "inferred-from-weapon-geometry",
+      "notes": [],
+      "rigUnit": 1.0033548387096773
+    },
+    {
+      "kind": "pig",
+      "error": null,
+      "frames": 1020,
+      "metrics": [
+        {
+          "id": "nonFinite",
+          "label": "non-finite bone matrix values",
+          "status": "PASS",
+          "value": 0,
+          "threshold": 0,
+          "kind": "pig"
+        },
+        {
+          "id": "footSkate",
+          "label": "foot skate (planted, per frame)",
+          "status": "FAIL",
+          "value": 0.2699271799636986,
+          "threshold": 0.0035,
+          "kind": "pig",
+          "bone": "footL",
+          "worstFrame": 550,
+          "seg": "sprint",
+          "p50": 0.009377856621927305,
+          "p95": 0.18143395416602956,
+          "replantSnap": 0.3601054769362562,
+          "replantSnapFrame": 552,
+          "detail": "peak 77.1 mm/frame, median 2.68 mm, p95 51.8 mm over 792 planted frames. footL swing clearance 0.425u, stance duty 82%. Touchdown/toe-off frames excluded; including them the worst jump is 102.9 mm at frame 552 (sprint) -- that number is the re-plant snap, not the plant lock. A high median means the whole stance slides; a low median with a high peak means a single re-plant."
+        },
+        {
+          "id": "footPenetrate",
+          "label": "foot ground penetration",
+          "status": "FAIL",
+          "value": 0.2820188496710936,
+          "threshold": 0.0175,
+          "kind": "pig",
+          "bone": "footL",
+          "worstFrame": 703,
+          "seg": "stop",
+          "detail": "80.6 mm below the floor plane"
+        },
+        {
+          "id": "footFloat",
+          "label": "foot float during stance",
+          "status": "FAIL",
+          "value": 0.040321058089439865,
+          "threshold": 0.0175,
+          "kind": "pig",
+          "bone": "footR",
+          "worstFrame": 582,
+          "seg": "sprint",
+          "detail": "11.5 mm above the floor while planted; swing clearance footR 0.504u over 779 stance frames"
+        },
+        {
+          "id": "strideCoherence",
+          "label": "stride vs distance travelled",
+          "status": "PASS",
+          "value": 1.4289380064818835,
+          "threshold": 12,
+          "kind": "pig",
+          "bone": "footR",
+          "worstFrame": 555,
+          "seg": "sprint",
+          "detail": "6 strides covering 19.37u while the body travelled 19.65u (ratio 0.986; 1.000 = perfectly phase-locked)"
+        },
+        {
+          "id": "kneeInversion",
+          "label": "knee inversion / hyperextension events",
+          "status": "PASS",
+          "value": 0,
+          "threshold": 0,
+          "kind": "pig",
+          "detail": "flexion range L 7.3-116.6 deg, R 7.3-136.1 deg (legal 0-150)"
+        },
+        {
+          "id": "elbowInTorso",
+          "label": "elbow inside torso capsule",
+          "status": "PASS",
+          "value": 0,
+          "threshold": 0,
+          "kind": "pig",
+          "detail": "4-slice elliptical torso hull built from the mesh"
+        },
+        {
+          "id": "supportHand",
+          "label": "support hand -> handguard",
+          "status": "FAIL",
+          "value": 0.08813096759245545,
+          "threshold": 0.07,
+          "kind": "pig",
+          "worstFrame": 850,
+          "bone": "handL",
+          "seg": "aim",
+          "median": 0.08813096759245337,
+          "gripSource": "inferred-from-weapon-geometry",
+          "detail": "worst 25 mm, median 25 mm; grip point source: inferred-from-weapon-geometry. The grip point is a centroid inferred from the weapon vertex cloud (support = 48-72% along the barrel axis, trigger = rear 16-36% below the bore). For an exact measurement, parent an Object3D named \"grip_support\" and \"grip_trigger\" under the weapon bone at the real contact points; the harness picks named anchors over inference automatically."
+        },
+        {
+          "id": "triggerHand",
+          "label": "trigger hand -> pistol grip",
+          "status": "FAIL",
+          "value": 0.07778387838479235,
+          "threshold": 0.0525,
+          "kind": "pig",
+          "worstFrame": 286,
+          "bone": "handR",
+          "seg": "walk",
+          "median": 0.0777838783847891,
+          "gripSource": "inferred-from-weapon-geometry",
+          "detail": "worst 22 mm, median 22 mm; grip point source: inferred-from-weapon-geometry. The grip point is a centroid inferred from the weapon vertex cloud (support = 48-72% along the barrel axis, trigger = rear 16-36% below the bore). For an exact measurement, parent an Object3D named \"grip_support\" and \"grip_trigger\" under the weapon bone at the real contact points; the harness picks named anchors over inference automatically."
+        },
+        {
+          "id": "weaponOAL",
+          "label": "weapon overall length vs spec",
+          "status": "FAIL",
+          "value": 47.088689416909155,
+          "threshold": 5,
+          "kind": "pig",
+          "bone": "weapon",
+          "measured": 1.8624781325247979,
+          "worldScale": 1.128774193548387,
+          "detail": "measured 1.862u (532 mm) along local z; spec combat shotgun 3.52u (1005 mm). Bind extent 1.650 x median weapon-bone world scale 1.1288; 148 verts skinned to the weapon bone. SCALE is 3.5 world units per metre."
+        }
+      ],
+      "boneCount": 22,
+      "gripSource": "inferred-from-weapon-geometry",
+      "notes": [],
+      "rigUnit": 1.128774193548387
+    },
+    {
+      "kind": "enforcer",
+      "error": null,
+      "frames": 1020,
+      "metrics": [
+        {
+          "id": "nonFinite",
+          "label": "non-finite bone matrix values",
+          "status": "PASS",
+          "value": 0,
+          "threshold": 0,
+          "kind": "enforcer"
+        },
+        {
+          "id": "footSkate",
+          "label": "foot skate (planted, per frame)",
+          "status": "FAIL",
+          "value": 0.16136477674875607,
+          "threshold": 0.0035,
+          "kind": "enforcer",
+          "bone": "footL",
+          "worstFrame": 409,
+          "seg": "strafe",
+          "p50": 0.009273311593856446,
+          "p95": 0.06925266594081397,
+          "replantSnap": 0.18303766905481123,
+          "replantSnapFrame": 556,
+          "detail": "peak 46.1 mm/frame, median 2.65 mm, p95 19.8 mm over 671 planted frames. footL swing clearance 0.436u, stance duty 73%. Touchdown/toe-off frames excluded; including them the worst jump is 52.3 mm at frame 556 (sprint) -- that number is the re-plant snap, not the plant lock. A high median means the whole stance slides; a low median with a high peak means a single re-plant."
+        },
+        {
+          "id": "footPenetrate",
+          "label": "foot ground penetration",
+          "status": "FAIL",
+          "value": 0.2672047648347742,
+          "threshold": 0.0175,
+          "kind": "enforcer",
+          "bone": "footR",
+          "worstFrame": 224,
+          "seg": "walk",
+          "detail": "76.3 mm below the floor plane"
+        },
+        {
+          "id": "footFloat",
+          "label": "foot float during stance",
+          "status": "FAIL",
+          "value": 0.04252499084001163,
+          "threshold": 0.0175,
+          "kind": "enforcer",
+          "bone": "footR",
+          "worstFrame": 423,
+          "seg": "strafe",
+          "detail": "12.1 mm above the floor while planted; swing clearance footR 0.532u over 648 stance frames"
+        },
+        {
+          "id": "strideCoherence",
+          "label": "stride vs distance travelled",
+          "status": "PASS",
+          "value": 1.9469122118727644,
+          "threshold": 12,
+          "kind": "enforcer",
+          "bone": "footR",
+          "worstFrame": 120,
+          "seg": "walk",
+          "detail": "5 strides covering 12.87u while the body travelled 13.12u (ratio 0.981; 1.000 = perfectly phase-locked)"
+        },
+        {
+          "id": "kneeInversion",
+          "label": "knee inversion / hyperextension events",
+          "status": "PASS",
+          "value": 0,
+          "threshold": 0,
+          "kind": "enforcer",
+          "detail": "flexion range L 7.3-125.0 deg, R 7.3-129.0 deg (legal 0-150)"
+        },
+        {
+          "id": "elbowInTorso",
+          "label": "elbow inside torso capsule",
+          "status": "PASS",
+          "value": 0,
+          "threshold": 0,
+          "kind": "enforcer",
+          "detail": "5-slice elliptical torso hull built from the mesh"
+        },
+        {
+          "id": "supportHand",
+          "label": "support hand -> handguard",
+          "status": "FAIL",
+          "value": 0.16024910623405916,
+          "threshold": 0.07,
+          "kind": "enforcer",
+          "worstFrame": 729,
+          "bone": "handL",
+          "seg": "stop",
+          "median": 0.16024910623405272,
+          "gripSource": "inferred-from-weapon-geometry",
+          "detail": "worst 46 mm, median 46 mm; grip point source: inferred-from-weapon-geometry. The grip point is a centroid inferred from the weapon vertex cloud (support = 48-72% along the barrel axis, trigger = rear 16-36% below the bore). For an exact measurement, parent an Object3D named \"grip_support\" and \"grip_trigger\" under the weapon bone at the real contact points; the harness picks named anchors over inference automatically."
+        },
+        {
+          "id": "triggerHand",
+          "label": "trigger hand -> pistol grip",
+          "status": "FAIL",
+          "value": 0.08691274837043123,
+          "threshold": 0.0525,
+          "kind": "enforcer",
+          "worstFrame": 305,
+          "bone": "handR",
+          "seg": "walk",
+          "median": 0.08691274837042412,
+          "gripSource": "inferred-from-weapon-geometry",
+          "detail": "worst 25 mm, median 25 mm; grip point source: inferred-from-weapon-geometry. The grip point is a centroid inferred from the weapon vertex cloud (support = 48-72% along the barrel axis, trigger = rear 16-36% below the bore). For an exact measurement, parent an Object3D named \"grip_support\" and \"grip_trigger\" under the weapon bone at the real contact points; the harness picks named anchors over inference automatically."
+        },
+        {
+          "id": "weaponOAL",
+          "label": "weapon overall length vs spec",
+          "status": "FAIL",
+          "value": 28.875683803476726,
+          "threshold": 5,
+          "kind": "enforcer",
+          "bone": "weapon",
+          "measured": 2.091054896177784,
+          "worldScale": 1.2228387096774194,
+          "detail": "measured 2.091u (597 mm) along local z; spec M4-pattern AR 2.94u (840 mm). Bind extent 1.710 x median weapon-bone world scale 1.2228; 198 verts skinned to the weapon bone. SCALE is 3.5 world units per metre."
+        }
+      ],
+      "boneCount": 25,
+      "gripSource": "inferred-from-weapon-geometry",
+      "notes": [],
+      "rigUnit": 1.2228387096774194
+    },
+    {
+      "kind": "octa",
+      "error": null,
+      "frames": 1020,
+      "metrics": [
+        {
+          "id": "nonFinite",
+          "label": "non-finite bone matrix values",
+          "status": "PASS",
+          "value": 0,
+          "threshold": 0,
+          "kind": "octa"
+        },
+        {
+          "id": "footSkate",
+          "label": "foot skate (planted, per frame)",
+          "status": "SKIP",
+          "value": null,
+          "threshold": null,
+          "kind": "octa",
+          "reason": "no foot bones resolved"
+        },
+        {
+          "id": "footPenetrate",
+          "label": "foot ground penetration",
+          "status": "SKIP",
+          "value": null,
+          "threshold": null,
+          "kind": "octa",
+          "reason": "no foot bones resolved"
+        },
+        {
+          "id": "footFloat",
+          "label": "foot float during stance",
+          "status": "SKIP",
+          "value": null,
+          "threshold": null,
+          "kind": "octa",
+          "reason": "no foot bones resolved"
+        },
+        {
+          "id": "strideCoherence",
+          "label": "stride vs distance travelled",
+          "status": "SKIP",
+          "value": null,
+          "threshold": null,
+          "kind": "octa",
+          "reason": "no foot bones resolved"
+        },
+        {
+          "id": "kneeInversion",
+          "label": "knee inversion / hyperextension events",
+          "status": "SKIP",
+          "value": null,
+          "threshold": null,
+          "kind": "octa",
+          "reason": "thigh/shin/foot bones not resolvable"
+        },
+        {
+          "id": "elbowInTorso",
+          "label": "elbow inside torso capsule",
+          "status": "PASS",
+          "value": 0,
+          "threshold": 0,
+          "kind": "octa",
+          "detail": "6-slice elliptical torso hull built from the mesh"
+        },
+        {
+          "id": "supportHand",
+          "label": "support hand -> handguard",
+          "status": "SKIP",
+          "value": null,
+          "threshold": null,
+          "kind": "octa",
+          "reason": "only 0 vertices are skinned to the weapon bone (need >=24); the weapon may be a separate mesh or merged into the body"
+        },
+        {
+          "id": "triggerHand",
+          "label": "trigger hand -> pistol grip",
+          "status": "SKIP",
+          "value": null,
+          "threshold": null,
+          "kind": "octa",
+          "reason": "only 0 vertices are skinned to the weapon bone (need >=24); the weapon may be a separate mesh or merged into the body"
+        },
+        {
+          "id": "weaponOAL",
+          "label": "weapon overall length vs spec",
+          "status": "SKIP",
+          "value": null,
+          "threshold": null,
+          "kind": "octa",
+          "reason": "only 0 vertices are skinned to the weapon bone (need >=24); the weapon may be a separate mesh or merged into the body"
+        }
+      ],
+      "boneCount": 19,
+      "gripSource": "none",
+      "notes": [
+        "only 0 vertices are skinned to the weapon bone (need >=24); the weapon may be a separate mesh or merged into the body",
+        "unresolved bone roles: thighL, thighR, shinL, shinR, footL, footR, handL, handR, foreL, foreR (known bones: hips,chest,head,weapon,t0_0,t0_1,t0_2,t1_0,t1_1,t1_2,t2_0,t2_1,t2_2,t3_0,t3_1,t3_2,t4_0,t4_1,t4_2)"
+      ],
+      "rigUnit": 1.4348571428571428
+    }
+  ],
+  "notes": [
+    "NZ.enemies.displayName is missing (contract C2/C3 asks for it)"
+  ],
+  "summary": {
+    "pass": 15,
+    "fail": 17,
+    "skip": 8
+  },
+  "provenance": {
+    "label": "PRE-OVERHAUL BASELINE (round-2 start)",
+    "capturedBy": "scripts/enemy-harness.mjs (HARNESS agent)",
+    "capturedAt": "2026-08-02T20:55:54.656Z",
+    "sourceOfTruth": ".backup-cs2/ -- the matched nz-enemies.js + nz-core.js + NUKEM.html set taken before the round-2 CS2 enemy overhaul began (mtime 2026-08-02 02:47).",
+    "why": "nz-enemies.js is untracked in git, so `git show HEAD:nz-enemies.js` cannot reproduce the pre-overhaul state. .backup-cs2/ is the only coherent snapshot of it.",
+    "gitCommitOfWorkingTree": "e524d6f (\"Upgrade enemy and weapon presentation\") -- HEAD at capture time; nz-enemies.js was NOT part of that commit.",
+    "files": {
+      "nz-enemies.js": {
+        "path": ".backup-cs2/nz-enemies.js",
+        "bytes": 116623
+      },
+      "nz-core.js": {
+        "path": ".backup-cs2/nz-core.js",
+        "bytes": 18948
+      },
+      "NUKEM.html": {
+        "path": ".backup-cs2/NUKEM.html",
+        "bytes": 249157
+      }
+    },
+    "headline": {
+      "foot penetration": "50-81 mm of the foot below the floor plane on all three bipeds (threshold 17.5 mm)",
+      "foot skate": "median in-stance slip 0.3-2.7 mm/frame, peaks 35-77 mm/frame (threshold 3.5 mm peak)",
+      "weapon OAL": "29-47% short of the spec table -- the trooper rifle measured 490 mm against an 880 mm AK",
+      "octa": "no legs at all: the skeleton is hips/chest/head + 15 tentacle bones, so every locomotion metric is unmeasurable (contract C1 requires it become a biped)",
+      "C3 surface": "absent -- no boneWorld/muzzleWorld/headWorld/hitboxes/poseAim/displayName"
+    },
+    "howToCompare": "node scripts/enemy-harness.mjs --baseline=scripts/enemy-baseline.json"
+  }
+}

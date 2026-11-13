@@ -1,0 +1,2452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CRITIC BOOT</title>
+<!-- ===========================================================================
+     _critic_operators.html  --  standalone OPERATOR LOOK-DEV STUDIO.
+
+     Owned by the CRITIC-RIG agent.  Does NOT load NUKEM.html: the game spends
+     ~35 s building a level and baking five modules' worth of textures before
+     the first frame, which does not fit in a 45 s shell call.  This page loads
+     only three.js + nz-core + nz-render + nz-enemies, synthesises the handful
+     of game globals nz-enemies probes for, and drives the rig through the same
+     NZ hook bus NUKEM.html uses.  Boot to first converged frame is ~5 s.
+
+     Nothing here fakes quality.  The lights, the IBL probe, the shadow config,
+     the post stack, the materials and the skinned geometry are all the real
+     module code; only the *stage* (ground, grey card, chrome ball, colour
+     chart) is local, and it is deliberately neutral so the character art is
+     judged on its own rather than on the level's night lighting.
+
+     ------------------------------------------------------------------ params
+       kind=trooper|pig|enforcer|octa      which operator
+       pose=idle|aim|walk|run|crouch|turn|dead
+       view=front|side|back|tq|back34|top  camera azimuth family
+       cell=full|head|hands|weld|feet|weapon|calib|silhouette
+            |maps|roster|anim|scale
+       env=studio|level                    WHICH LIGHT. `studio` is the
+                                           calibrated neutral rig (18% grey in
+                                           -> 18% grey out, see CALIB below).
+                                           `level` mirrors NUKEM.html's own
+                                           key / ambient / fog / background so
+                                           an operator is judged in the light
+                                           the player will really see.
+       sheet=a:b:c:d,a:b:c:d,...           contact sheet (kind:pose:view:cell)
+       cols=N                              sheet columns
+       w= h=                               OUTPUT size of one cell, px
+       ss=1..3                             supersample: render at ss x, box down
+       nzq=low|med|high|ultra              pinned render tier (read by nz-render)
+       nzr=0|1                             use nz-render post stack (default 1)
+       taa=N                               TAA converge frames (default 3)
+       frames=N                            cell=anim: strip length (default 8)
+       keyaz= keyel=                       key light azimuth / elevation, deg.
+                                           Default: 52 deg off the FIRST cell's
+                                           camera, 34 up. Baked once -- the IBL
+                                           probe is built from it -- so a whole
+                                           sheet shares one light.
+       keyi= envi=                         studio key intensity / probe mean
+                                           radiance. Defaults are the CALIBRATED
+                                           pair; overriding either is announced.
+       ev=<stops>                          nudge nz-render's exposure. Default 0
+                                           (untouched); any other value is
+                                           announced in the header strip.
+       fov=<deg>                           force one focal length everywhere
+       deadline=<ms>                       stop starting cells after this
+       seed=N                              Math.random seed
+       labels=0|1                          burn-in captions (default 1)
+       grid=0|1                            thirds guides (default 0)
+       dbg=1                               per-phase console tracing
+       fence=1                             gl.finish() per frame (honest timings)
+
+     The page publishes:
+       document.title = 'CRITIC CELL k/n'  cell k has finished and is fetchable
+       document.title = 'CRITIC READY'     every planned cell has converged
+       window.__criticCellPNG(k)           -> dataURL of one finished cell
+       window.__criticPNG()                -> dataURL of the whole composited sheet
+       window.__criticInfo                 -> timings, warnings, rig stats,
+                                              measured weapon OAL
+     ======================================================================== -->
+<style>
+  html,body{margin:0;padding:0;background:#101214;overflow:hidden}
+  #sheet{display:block;position:absolute;left:0;top:0}
+  #gl{position:absolute;left:-10000px;top:0}
+</style>
+</head>
+<body>
+<canvas id="sheet"></canvas>
+<canvas id="gl"></canvas>
+
+<script>
+/* ------------------------------------------------------------------ params */
+window.__T = { t0: performance.now(), marks: [] };
+window.__mark = function (n) { window.__T.marks.push([n, performance.now() - window.__T.t0]); };
+(function () {
+  var q = {}, s = location.search.replace(/^\?/, '');
+  s.split('&').forEach(function (kv) {
+    if (!kv) return; var i = kv.indexOf('=');
+    q[decodeURIComponent(i < 0 ? kv : kv.slice(0, i))] = i < 0 ? '1' : decodeURIComponent(kv.slice(i + 1));
+  });
+  window.__Q = q;
+})();
+</script>
+
+<script src="vendor/three.r149.min.js"></script>
+<script src="nz-core.js"></script>
+
+<script>
+/* ============================================================================
+   GAME-GLOBAL SHIMS
+   nz-enemies.js probes for these by bare name in probeGlobals().  Shapes are
+   copied from NUKEM.html's spawnEnemy / player / state so the module is
+   measuring the game, not the harness.  ECFG is pulled out of NUKEM.html at
+   load time -- the AI agent owns that file and its numbers move, so reading
+   the literal is the only way to stay in sync.  Falls back loudly.
+   ========================================================================= */
+window.__mark('three+core');
+var CRITIC_WARN = [];
+function cwarn(s) { CRITIC_WARN.push(s); try { console.warn('[critic] ' + s); } catch (e) {} }
+
+var ECFG_FALLBACK = {
+  trooper:  { tex:'e_trooper', hp:78, spd:13, rad:1.6, w:5.0, h:6.4, sight:104, keep:30, stride:4.6, glow:[1,.17,.09], range:120, accel:54, decel:88, turn:7.6, zone:{head:4,body:1,limb:.78} },
+  pig:      { tex:'e_pig', hp:118, spd:12, rad:1.82, w:6.2, h:7.2, sight:78, keep:11, stride:5.2, glow:[.45,.85,1], range:44, accel:46, decel:70, turn:6.2, zone:{head:2.7,body:.88,limb:.68} },
+  enforcer: { tex:'e_enforcer', hp:100, spd:14, rad:1.80, w:6.0, h:7.8, sight:112, keep:26, stride:5.6, glow:[1,.60,.12], range:128, accel:60, decel:92, turn:8.0, zone:{head:3.4,body:.95,limb:.72} },
+  octa:     { tex:'e_octa', hp:72, spd:11.5, rad:1.7, w:5.2, h:6.2, sight:170, keep:72, stride:4.4, float:0, glow:[.5,1,.38], range:150, accel:34, decel:62, turn:5.6, zone:{head:3.8,body:.92,limb:.7} }
+};
+
+/* brace-matched literal extraction: survives comments and nested objects */
+function extractLiteral(src, name) {
+  var re = new RegExp('(?:^|\\n)\\s*(?:const|let|var)\\s+' + name + '\\s*=\\s*\\{'), m = re.exec(src);
+  if (!m) return null;
+  var j = src.indexOf('{', m.index), d = 0, k = j, inS = 0, esc = 0;
+  for (; k < src.length; k++) {
+    var ch = src[k];
+    if (inS) { if (esc) esc = 0; else if (ch === '\\') esc = 1; else if (ch === inS) inS = 0; continue; }
+    if (ch === '"' || ch === "'" || ch === '`') { inS = ch; continue; }
+    if (ch === '/' && src[k + 1] === '*') { k = src.indexOf('*/', k); if (k < 0) return null; k++; continue; }
+    if (ch === '/' && src[k + 1] === '/') { k = src.indexOf('\n', k); if (k < 0) return null; continue; }
+    if (ch === '{') d++;
+    else if (ch === '}') { d--; if (d === 0) { k++; break; } }
+  }
+  return src.slice(j, k);
+}
+
+var ECFG = null, ERIG = { geo: null, mats: {}, near: 25, far: 29, max: 8 };
+(function () {
+  try {
+    var x = new XMLHttpRequest();
+    x.open('GET', 'NUKEM.html', false); x.send(null);
+    var src = x.responseText || '';
+    var lit = extractLiteral(src, 'ECFG');
+    if (lit) ECFG = (0, eval)('(' + lit + ')');
+    var el = extractLiteral(src, 'ERIG');
+    if (el) { try { ERIG = (0, eval)('(' + el + ')'); } catch (e) {} }
+  } catch (err) { cwarn('could not read NUKEM.html for ECFG (' + err.message + ')'); }
+  if (!ECFG || !ECFG.trooper) {
+    ECFG = ECFG_FALLBACK;
+    cwarn('ECFG NOT FOUND IN NUKEM.html - using the CS2-ENEMY-BRIEF table. Heights/strides may be stale.');
+  }
+})();
+window.__mark('ecfg');
+
+/* the rest of the surface probeGlobals() reaches for */
+var enemies = [];
+var player = { x: 0, y: 0, z: 26, r: 1.4, hp: 100, vx: 0, vz: 0 };
+var state  = { playing: true, booted: true, t: 0, over: false };
+var EYE = 2.85;
+function moveSlide(x, z, dx, dz, r, floor) { return [x + dx, z + dz]; }
+function particle() {}
+function highestFloor() { return 0; }
+function floorAt() { return 0; }
+function sfx() {}
+
+/* deterministic: reseed before any module can draw a random number */
+(function () {
+  var seed = (window.__Q.seed | 0) || 20260803;
+  if (NZ.tex && NZ.tex.mulberry32) Math.random = NZ.tex.mulberry32(seed >>> 0);
+})();
+
+/* nz-render is optional so a blown frame budget can be isolated from a blown
+   asset budget.  document.write keeps the classic-script load order exact. */
+if (window.__Q.nzr !== '0') document.write('<scr' + 'ipt src="nz-render.js"></scr' + 'ipt>');
+</script>
+
+<script src="nz-enemies.js"></script>
+
+<script>
+/* ============================================================================
+   THE STUDIO
+   ========================================================================= */
+(function () {
+'use strict';
+var Q = window.__Q, T = window.__T;
+window.__mark('modules');
+
+var THREE = window.THREE;
+/* Phase tracing. Off by default: the runner's console channel is the only
+   window into a hung page, and 40 lines of blit timings in it is how a real
+   error gets missed. `dbg=1` turns it on. */
+var DBG = /[?&]dbg=1/.test(location.search);
+function dbg(s) { if (!DBG) return; try { console.log('[critic] ' + ((performance.now() - T.t0) | 0) + 'ms ' + s); } catch (e) {} }
+var num = function (k, d) { var v = parseFloat(Q[k]); return isFinite(v) ? v : d; };
+var str = function (k, d) { return Q[k] !== undefined && Q[k] !== '' ? String(Q[k]) : d; };
+
+var CELL_W = Math.max(64, num('w', 900) | 0);
+var CELL_H = Math.max(64, num('h', 900) | 0);
+var SS     = Math.max(1, Math.min(3, num('ss', 1)));
+var LABELS = str('labels', '1') !== '0';
+var GRID   = str('grid', '0') !== '0';
+var TAA_N  = Math.max(1, num('taa', 3) | 0);
+var USE_R  = Q.nzr !== '0';
+var FENCE  = str('fence', '0') !== '0'; /* gl.finish() per frame: honest timings */
+var FOV_OVERRIDE = num('fov', 0);       /* force one focal length everywhere */
+/* The runner has a hard 40 s shell wall. The page is the only thing that knows
+   how long a cell actually took, so it -- not the runner -- decides when to
+   stop starting new ones. Cells that do not fit are simply not rendered and
+   never announced; the runner reports them as still pending. */
+var DEADLINE = num('deadline', 0);      /* ms since page start, 0 = no limit */
+var FRAMES_N = Math.max(2, Math.min(12, num('frames', 8) | 0));
+
+/* ------------------------------------------------------------ environment --
+   Two rigs, and the header always says which one you are looking at.
+
+   studio  a calibrated neutral look-dev set.  The whole point of a look-dev
+           stage is that the numbers coming out of it are trustworthy: an 18%
+           grey card must render as 18% grey, or every albedo decision made
+           from the image is made against a lie.  See CALIB below.
+   level   NUKEM.html's own rig, verbatim -- the level's fog, background,
+           light colours, light intensities and key azimuth, handed to
+           nz-render exactly as boot() hands them over, with NOTHING of this
+           page's calibration applied.  This is the light the player sees.
+           If it disagrees with `studio`, that disagreement is the finding. */
+var ENVMODE = (str('env', 'studio') === 'level') ? 'level' : 'studio';
+
+/* Mirrored from NUKEM.html boot() -- the four lights, the fog and the clear
+   colour, at the values the game ships.  nz-render then rebalances them on
+   rendererInit/ready exactly as it does in game, so `level` really is the
+   in-game rig and not an approximation of it. */
+var LEVEL_RIG = {
+  background: 0x01030a,
+  fog: { color: 0x01040b, near: 52, far: 338 },
+  ambient: { color: 0xfff3df, intensity: 0.80 },
+  skyFill: { sky: 0x92bcff, ground: 0x24150d, intensity: 0.27 },
+  sunKey:  { color: 0xffd5a8, intensity: 0.62, offset: [-72, 118, 58] },
+  coolRim: { color: 0x628aff, intensity: 0.22, position: [105, 54, -92] },
+  /* atan2(x,z) of the key offset: the azimuth the level author chose, which
+     is what puts light on the facades the street views show lit */
+  keyAz: Math.atan2(-72, 58) * 180 / Math.PI,
+  /* concrete, not studio neutral: a 45% white cyc under the operator would
+     bounce light the real level has nowhere to come from */
+  ground: 0x4a4844, backdrop: 0x15171b
+};
+
+var KINDS = ['trooper', 'pig', 'enforcer', 'octa'];
+var DISPLAY = (NZ.enemies && NZ.enemies.displayName) ||
+  { trooper: 'RIFLEMAN', pig: 'BREACHER', enforcer: 'ASSAULTER', octa: 'MARKSMAN' };
+var KIT = { trooper: 'AK-pattern AR', pig: 'combat shotgun', enforcer: 'M4-pattern AR', octa: 'bolt DMR' };
+
+/* --------------------------------------------------------------- the plan */
+/* One "cell" is one rendered image.  A single-cell run is the cheap default;
+   sheet= builds a grid out of many.  Format kind:pose:view:cell, any field
+   may be '-' to inherit the URL default. */
+function parseCell(spec, dflt) {
+  var p = String(spec).split(':');
+  var pick = function (i, d) { return (p[i] && p[i] !== '-') ? p[i] : d; };
+  return {
+    kind: pick(0, dflt.kind), pose: pick(1, dflt.pose),
+    view: pick(2, dflt.view), cell: pick(3, dflt.cell)
+  };
+}
+var DFLT = { kind: str('kind', 'trooper'), pose: str('pose', 'aim'), view: str('view', 'tq'), cell: str('cell', 'full') };
+var PLAN = Q.sheet ? String(Q.sheet).split(',').filter(Boolean).map(function (s) { return parseCell(s, DFLT); })
+                   : [parseCell('-:-:-:-', DFLT)];
+var COLS = Math.max(1, num('cols', Math.min(PLAN.length, Math.ceil(Math.sqrt(PLAN.length)))) | 0);
+var ROWS = Math.ceil(PLAN.length / COLS);
+
+/* -------------------------------------------------------------- 2D output */
+var sheet = document.getElementById('sheet');
+sheet.width  = COLS * CELL_W;
+sheet.height = ROWS * CELL_H;
+/* willReadFrequently is not an optimisation here, it is a correctness fix.
+   Under SwiftShader in chrome-headless-shell, ANY path that hands a WebGL
+   canvas to the 2D compositor -- drawImage(glCanvas) into an accelerated
+   canvas, or toDataURL() on the result -- deadlocks and never returns. So the
+   canvas is pinned CPU-side and pixels arrive by gl.readPixels (see blitGL),
+   which never touches the compositor at all. */
+var s2d = sheet.getContext('2d', { willReadFrequently: true });
+s2d.fillStyle = '#0d0f11'; s2d.fillRect(0, 0, sheet.width, sheet.height);
+(function () {   /* keep the sheet on screen whatever its aspect */
+  var k = Math.min(1, 1400 / sheet.width, 1000 / sheet.height);
+  sheet.style.width = Math.round(sheet.width * k) + 'px';
+  sheet.style.height = Math.round(sheet.height * k) + 'px';
+})();
+
+/* -------------------------------------------------------------- renderer */
+var RW = Math.round(CELL_W * SS), RH = Math.round(CELL_H * SS);
+var glc = document.getElementById('gl');
+glc.width = RW; glc.height = RH;
+var renderer = new THREE.WebGLRenderer({
+  canvas: glc, antialias: SS < 2, alpha: false, stencil: false, depth: true,
+  powerPreference: 'high-performance'
+});
+renderer.setPixelRatio(1);
+renderer.setSize(RW, RH, false);
+if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace; else renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.18;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+/* --------------------------------------------------- capture redirection --
+   chrome-headless-shell + SwiftShader cannot read the DEFAULT framebuffer:
+   gl.readPixels(0,...) on the canvas, drawImage(glCanvas) and toDataURL() on
+   the result all block forever inside the compositor.  Reading an FBO we own
+   works (nz-render does it internally every boot).  So setRenderTarget(null)
+   is remapped to a capture target of exactly the drawing-buffer size: every
+   pass, including nz-render's final FXAA present, lands there instead of on
+   the canvas, and the bytes are identical -- three.js only applies an output
+   colour-space conversion of its own for MeshStandard-family materials, and
+   the target carries the same SRGBColorSpace the canvas would have. */
+var capRT = new THREE.WebGLRenderTarget(RW, RH, {
+  format: THREE.RGBAFormat, type: THREE.UnsignedByteType,
+  minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+  depthBuffer: true, stencilBuffer: false, generateMipmaps: false
+});
+if (THREE.SRGBColorSpace) capRT.texture.colorSpace = THREE.SRGBColorSpace;
+else capRT.texture.encoding = THREE.sRGBEncoding;
+var _setRT = renderer.setRenderTarget.bind(renderer);
+renderer.setRenderTarget = function (t, a, m) { return _setRT((t === null || t === undefined) ? capRT : t, a, m); };
+
+var scene = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(32, RW / RH, 0.4, 900);
+camera.rotation.order = 'YXZ';
+window.__mark('gl');
+
+/* ============================================================== the stage */
+/* Neutral look-dev set.  Real-world scale: SCALE = 3.5 world units / metre
+   (CS2-ENEMY-BRIEF section 2), so a 1 m grey card is 3.5 units. */
+var SCALE = 3.5;
+var M = function (metres) { return metres * SCALE; };
+
+var STAGE = { props: new THREE.Group(), backdrop: null };
+scene.add(STAGE.props);
+
+function stdMat(hex, rough, metal) {
+  return new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: rough, metalness: metal === undefined ? 0 : metal });
+}
+/* ------------------------------------------- THE COLOUR-SPACE LANDMINE ----
+   three r149 ships `ColorManagement.legacyMode = true`, and Color.setHex()
+   bails out of toWorkingColorSpace() when it is.  So `new Color(0x767676)`
+   does NOT give an 18% reflectance surface -- it gives 0x76/255 = 0.463 used
+   RAW AS LINEAR, which is 46% reflectance, a stop and a third brighter than
+   the number in the source says.  Textures are different: a CanvasTexture
+   tagged SRGBColorSpace IS decoded in the shader.  So in this build every
+   TEXTURED surface is correct and every surface tinted by a bare hex constant
+   is roughly a stop too bright, and the two disagree with each other.
+
+   That is not a studio problem, it is a project problem -- it is in the
+   report -- but the calibration props have to be right regardless, so they
+   are specified as REFLECTANCE and written straight into the linear channels
+   where no colour-management default can reach them. */
+function linMat(reflect, rough, metal) {
+  var m = new THREE.MeshStandardMaterial({ roughness: rough, metalness: metal === undefined ? 0 : metal });
+  m.color.r = m.color.g = m.color.b = reflect;
+  return m;
+}
+function linColour(m, r, g, b) { m.color.r = r; m.color.g = g; m.color.b = b; return m; }
+
+/* ground -- neutral, with a faint 1 m grid so foot placement, stride length
+   and scale can be read straight off the image.  The albedo is chosen so that
+   under THIS light rig (nz-render pushes the key to ~3.15 and adds an IBL
+   probe) the floor lands around 35-45% in the final image: bright enough to
+   show a cast shadow, dark enough not to bloom the silhouette. */
+function gridTexture() {
+  var R = 256, c = document.createElement('canvas'); c.width = c.height = R;
+  var g = c.getContext('2d', { willReadFrequently: true });
+  /* white base: the ground's reflectance is carried by the MATERIAL colour
+     (raw linear, see linMat) so it is one number and it is measurable */
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, R, R);
+  g.strokeStyle = 'rgba(0,0,0,.20)'; g.lineWidth = 2;
+  g.strokeRect(1, 1, R - 2, R - 2);                 /* 1 m cell border */
+  g.strokeStyle = 'rgba(0,0,0,.07)'; g.lineWidth = 1;
+  for (var i = 1; i < 4; i++) {                      /* 25 cm subdivisions */
+    var p = Math.round(R * i / 4) + .5;
+    g.beginPath(); g.moveTo(p, 0); g.lineTo(p, R); g.stroke();
+    g.beginPath(); g.moveTo(0, p); g.lineTo(R, p); g.stroke();
+  }
+  var t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(90, 90);                              /* one cell per metre */
+  t.anisotropy = 8;
+  if (THREE.SRGBColorSpace) t.colorSpace = THREE.SRGBColorSpace; else t.encoding = THREE.sRGBEncoding;
+  return t;
+}
+/* A look-dev floor that is not a known reflectance is a floor whose bounce you
+   cannot subtract, so this one is 18% exactly: everything the operator picks
+   up from below is 18% grey light. env=level gets dirty concrete (0.14). */
+var groundMat = linMat(ENVMODE === 'level' ? 0.14 : 0.18, 0.86, 0);
+groundMat.map = gridTexture();
+var ground = new THREE.Mesh(new THREE.PlaneGeometry(M(90), M(90), 1, 1), groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+ground.name = 'critic-ground';
+scene.add(ground);
+
+/* backdrop card -- a cyc wall.  Re-placed per cell to stand directly behind
+   the subject with its BOTTOM ON THE FLOOR, so the horizon line and the cast
+   shadow are always in frame: "nothing floats" cannot be judged against a
+   card that hides the floor. */
+var backdrop = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+  stdMat(ENVMODE === 'level' ? LEVEL_RIG.backdrop : 0x26282b, 0.96, 0));
+backdrop.receiveShadow = true; backdrop.name = 'critic-backdrop';
+scene.add(backdrop);
+STAGE.backdrop = backdrop;
+
+/* ------------------------------------------------------------ calibration --
+   The measurable part of the stage.  Every prop here has a KNOWN reflectance
+   so the picture can be checked against arithmetic instead of taste:
+
+     PROBE_PATCHES  world positions + true linear albedo, sampled out of the
+                    finished frame by measureCalib() and printed in the cell.
+     key tab        a card whose normal points exactly AT THE KEY, i.e. cos
+                    theta = 1.  This is the one number the whole rig is
+                    calibrated on: albedo 0.18 in must give 0.18 out.
+     camera card    the same 18% card facing the CAMERA -- the classic grey
+                    card read.  With a 3:1 key:fill at 52 degrees off axis it
+                    should land within a tenth of a stop of the key tab.
+     spheres        chrome (environment read), 0.22-gloss (key highlight --
+                    a mirror ball's highlight is a sub-pixel dot at this
+                    framing and proves nothing), and 18% matte. */
+var PROBE = [];      /* {name, obj, a: true linear albedo, face: cam|key|fill} */
+var CALIB_KEYTAB = null, CALIB_FILLTAB = null, CALIB_BLOCKPIVOT = null;
+(function buildProps() {
+  var g = STAGE.props;
+  /* THE PROPS STAND IN FRONT OF THE OPERATOR, not beside him.  At a 34 degree
+     key the operator throws a shadow ~1.5x his own height along the ground and
+     up any vertical surface behind it; with the chart at his own depth, half
+     the ColorChecker and the whole grey wedge were sitting in that shadow and
+     reading 0.7 stops under while the calibration tab read 1.7 over.  A
+     measurement standing in the subject's shadow measures the subject, not the
+     light.  1.30 m towards the lens clears it for any key elevation above ~20
+     degrees, whatever the azimuth. */
+  var PZ = 1.30;
+  var ballR = M(0.14);                      /* 140 mm -- the standard kit ball */
+  function ball(rough, metal, reflect, x, z) {
+    var b = new THREE.Mesh(new THREE.SphereGeometry(ballR, 40, 28), linMat(reflect, rough, metal));
+    b.castShadow = true;
+    var hy = M(1.05);
+    b.position.set(M(x), hy + ballR, M(z));
+    var p = new THREE.Mesh(new THREE.CylinderGeometry(M(0.02), M(0.03), hy, 12), linMat(0.04, 0.7, 0.1));
+    p.position.set(M(x), hy / 2, M(z)); p.castShadow = true;
+    g.add(b, p);
+    return b;
+  }
+  /* chrome for the environment read; 0.22 gloss because a MIRROR ball's key
+     highlight is a sub-pixel dot at this framing and proves nothing about the
+     key -- the gloss ball is the one that shows you where the light is. */
+  ball(0.045, 1, 0.90, 0.72, PZ).name = 'chrome-ball';
+  ball(0.22,  1, 0.75, 1.20, PZ).name = 'gloss-ball';
+  var greyBall = ball(0.95, 0, 0.18, 1.68, PZ);
+  greyBall.name = 'grey-ball';
+  PROBE.push({ name: 'ball18', obj: greyBall, a: 0.180, face: 'cam' });
+
+  /* grey wedge: 2%, 18%, 90% TRUE reflectance, facing the camera */
+  var wedge = [0.02, 0.18, 0.90];
+  for (var i = 0; i < 3; i++) {
+    var p = new THREE.Mesh(new THREE.PlaneGeometry(M(0.18), M(0.18)), linMat(wedge[i], 0.95, 0));
+    p.position.set(M(-0.95) + i * M(0.19), M(1.34), M(PZ + 0.04));
+    p.castShadow = false; p.receiveShadow = true; g.add(p);
+    PROBE.push({ name: ['2%', 'CARD18', '90%'][i], obj: p, a: wedge[i], face: i === 1 ? 'card' : 'cam' });
+  }
+  /* ColorChecker, sRGB reference values */
+  var CC = [
+    0x735244,0xc29682,0x627a9d,0x576c43,0x8580b1,0x67bdaa,
+    0xd67e2c,0x505ba6,0xc15a63,0x5e3c6c,0x9dbc40,0xe0a32e,
+    0x383d96,0x469449,0xaf363c,0xe7c71f,0xbb5695,0x0885a1,
+    0xf3f3f2,0xc8c8c8,0xa0a0a0,0x7a7a7a,0x555555,0x343434];
+  var cw = M(0.075), gap = M(0.008), x0 = M(-1.02), y0 = M(1.10);
+  for (var r = 0; r < 4; r++) for (var c = 0; c < 6; c++) {
+    var hex = CC[r * 6 + c];
+    /* the reference values are sRGB, so they are DECODED here -- the whole
+       point of a ColorChecker is that the patch reflectance is known */
+    var q = new THREE.Mesh(new THREE.PlaneGeometry(cw, cw),
+      linColour(linMat(1, 0.96, 0), srgbToLin(((hex >> 16) & 255) / 255),
+        srgbToLin(((hex >> 8) & 255) / 255), srgbToLin((hex & 255) / 255)));
+    q.position.set(x0 + c * (cw + gap), y0 - r * (cw + gap), M(PZ + 0.04));
+    q.receiveShadow = true;
+    q.userData.ref = hex;
+    g.add(q);
+    if (r === 3) PROBE.push({ name: 'cc' + c, obj: q, a: srgbToLin(((CC[18 + c] >> 8) & 255) / 255), face: 'cam' });
+  }
+  /* a card behind the chart so it does not float */
+  var card = new THREE.Mesh(new THREE.PlaneGeometry(M(1.30), M(0.78)), linMat(0.055, 0.92, 0));
+  card.position.set(M(-0.755), M(0.975), M(PZ + 0.03));
+  card.receiveShadow = true; g.add(card);
+
+  /* THE TWO TABS.  Both are 18% grey; only their normals differ.
+
+     KEY18   normal straight down the key vector, cos = 1: key at full
+             strength plus fill.
+     FILL18  normal PERPENDICULAR to the key.  Every direct-light term in the
+             shader is multiplied by N.L, so at cos = 0 the key contributes
+             exactly zero -- no occluder, no shadow map, nothing that can
+             silently fail -- while the IBL and the ambient floor are
+             untouched.  This reads the fill alone.
+             (Two earlier attempts failed and are worth not repeating: a gobo
+             in front of a camera-facing tab needed its shadow to land inside
+             a 0.6 m card at every key azimuth and silently did not; and an
+             ANTI-key tab reads identically to the key tab, because a
+             DoubleSide material flips the normal towards the viewer and hands
+             back the key-facing value.)
+
+     key:fill then falls straight out of the two numbers, in one frame. */
+  var mkTab = function (x, name) {
+    var t = new THREE.Mesh(new THREE.PlaneGeometry(M(0.26), M(0.26)), linMat(0.18, 0.95, 0));
+    t.position.set(M(x), M(1.76), M(PZ));
+    t.name = name; t.receiveShadow = true;
+    g.add(t);
+    return t;
+  };
+  CALIB_KEYTAB  = mkTab(-0.16, 'key-normal-18pct');
+  CALIB_FILLTAB = mkTab(0.42, 'key-perpendicular-18pct');
+  PROBE.push({ name: 'KEY18', obj: CALIB_KEYTAB, a: 0.180, face: 'key' });
+  PROBE.push({ name: 'FILL18', obj: CALIB_FILLTAB, a: 0.180, face: 'fill' });
+
+  /* height ruler: 0.5 m blocks up to 2 m, stood just behind the operator's
+     left shoulder where nothing else is, so a critic can read stature off the
+     picture instead of trusting the caption */
+  for (var b = 0; b < 4; b++) {
+    var bar = new THREE.Mesh(new THREE.BoxGeometry(M(0.07), M(0.5), M(0.07)),
+      linMat(b % 2 ? 0.75 : 0.03, 0.88, 0));
+    bar.position.set(M(0.62), M(0.25) + b * M(0.5), M(-0.40));
+    bar.castShadow = true; g.add(bar);
+  }
+  g.visible = false;
+})();
+function srgbToLin(v) { return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+function linToSrgb(v) { return v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; }
+window.__mark('stage');
+
+/* ================================================================ lights */
+/* Shape copied from NUKEM.html boot(): nz-render takes these over on
+   rendererInit and re-aims / re-colours them.  Only the AZIMUTH survives, so
+   it is chosen per run before 'ready' fires and the IBL probe is baked.
+   In env=level the CONSTRUCTOR VALUES are the level's too, so nz-render is
+   handed byte-for-byte what NUKEM.html hands it. */
+var LR = LEVEL_RIG, isLev = (ENVMODE === 'level');
+var ambient = new THREE.AmbientLight(isLev ? LR.ambient.color : 0xbcd0e8, isLev ? LR.ambient.intensity : 0.30);
+ambient.name = 'ambient-fill';
+var skyFill = new THREE.HemisphereLight(isLev ? LR.skyFill.sky : 0x9dc2f0,
+  isLev ? LR.skyFill.ground : 0x352a1e, isLev ? LR.skyFill.intensity : 0.30);
+skyFill.name = 'sky-fill';
+var sunKey  = new THREE.DirectionalLight(isLev ? LR.sunKey.color : 0xffe0b6, isLev ? LR.sunKey.intensity : 3.15);
+sunKey.name = 'warm-key';
+var coolRim = new THREE.DirectionalLight(isLev ? LR.coolRim.color : 0x9ab4dd, isLev ? LR.coolRim.intensity : 0.20);
+coolRim.name = 'cool-rim';
+/* The level's fog and clear colour go up BEFORE rendererInit, because
+   nz-render's applyAtmosphere() retints whatever fog it finds to match the sky
+   probe -- give it no fog and you are not looking at the level's air. */
+if (isLev) {
+  scene.background = new THREE.Color(LR.background);
+  scene.fog = new THREE.Fog(LR.fog.color, LR.fog.near, LR.fog.far);
+}
+sunKey.castShadow = true;
+sunKey.shadow.mapSize.set(2048, 2048);
+sunKey.shadow.camera.left = -M(4); sunKey.shadow.camera.right = M(4);
+sunKey.shadow.camera.top = M(4); sunKey.shadow.camera.bottom = -M(4);
+sunKey.shadow.camera.near = M(1); sunKey.shadow.camera.far = M(60);
+sunKey.shadow.bias = -0.00022; sunKey.shadow.normalBias = 0.022; sunKey.shadow.radius = 2.4;
+sunKey.shadow.camera.updateProjectionMatrix();
+scene.add(ambient, skyFill, sunKey, sunKey.target, coolRim);
+
+var SUN_D = M(24);
+function aimKey(azDeg, elevDeg) {
+  var a = azDeg * Math.PI / 180, el = (elevDeg === undefined ? 42 : elevDeg) * Math.PI / 180;
+  var h = Math.cos(el) * SUN_D;
+  sunKey.position.set(Math.sin(a) * h, Math.sin(el) * SUN_D, Math.cos(a) * h);
+  sunKey.target.position.set(0, M(1.0), 0);
+  sunKey.target.updateMatrixWorld();
+  coolRim.position.set(-Math.sin(a) * h * 0.8, M(6), -Math.cos(a) * h * 0.8);
+}
+
+/* view family -> camera azimuth in degrees (0 = looking at the operator's
+   front, i.e. camera on +Z; the rig faces +Z at face = 0) */
+var VIEW_AZ = { front: 0, tq: 38, side: 90, back34: 145, back: 180, top: 24, left: -90, left34: -38 };
+function viewAz(v) { return VIEW_AZ[v] !== undefined ? VIEW_AZ[v] : 38; }
+
+var CELLS = {
+  full:       { distM: 4.2, margin: 1.06, elev: 6,  whole: 1, azMode: 'view' },
+  silhouette: { distM: 4.2, margin: 1.06, elev: 6,  whole: 1, silhouette: 1, azMode: 'view' },
+  calib:      { distM: 3.0, margin: 1.03, elev: 4,  whole: 1, props: 1, azMode: 'view' },
+  /* head: 1.2 m is a portrait standoff -- close enough to read the face
+     geometry, far enough not to barrel-distort it.  Three-quarter to the aim
+     line, because that is where a face either has a jaw or does not. */
+  head:   { distM: 1.15, margin: 1.10, elev: 3,  bones: ['head', 'neck'], pad: 0.17, azMode: 'weapon', azRel: 26 },
+  /* hands: 75 degrees off the BORE AXIS, on the support-hand side. Taken from
+     the muzzle direction the rig actually reports, not from the requested
+     view, so it keeps pointing at the grips no matter how the aim solver
+     changes. Both the C-clamp on the handguard and the trigger hand on the
+     pistol grip are unobstructed from here. */
+  hands:  { distM: 1.45, margin: 1.08, elev: 5, bones: ['handL', 'handR', 'fingL', 'fingR', 'trigR'], pad: 0.20, azMode: 'weapon', azRel: -75 },
+  /* weld: right-side profile plus 15 degrees of rear -- the butt in the
+     shoulder pocket and the cheek on the comb either read from here or the
+     pose is wrong */
+  weld:   { distM: 1.55, margin: 1.08, elev: 2,  bones: ['head', 'neck', 'clavR', 'chest', 'handR', 'trigR', 'armR'], pad: 0.19, azMode: 'weapon', azRel: 105 },
+  /* feet: just above boot height, looking down 16 degrees, relative to the
+     BODY rather than the aim -- the feet follow the hips, not the gun */
+  feet:   { distM: 1.7, margin: 1.14, elev: 16, bones: ['footL', 'footR', 'toeL', 'toeR', 'shinL', 'shinR'], pad: 0.10, azMode: 'body', azRel: 42 },
+  weapon: { distM: 1.7, margin: 1.08, elev: 12, weapon: 1, azMode: 'weapon', azRel: -58 },
+
+  /* ---------------------------------------------------------- new cells -- */
+  /* Every surface in the build currently reads as the same shredded corduroy.
+     That is a TEXTURE defect and it cannot be debugged from a beauty render,
+     so: the four baked atlas channels as flat labelled images, next to a
+     chamfered cube and a sphere carrying each named material region. If the
+     albedo tiles are all the same grey and the normal map is all the same
+     fbm, the cube row makes it undeniable in one look. */
+  maps:   { custom: 'maps' },
+  /* Roster differentiation is a stated goal of the brief and it is only
+     judgeable side by side: same light, same lens, same standoff, one frame.
+     Four separate images at four different focal lengths prove nothing. */
+  roster: { custom: 'roster', distM: 6.4, margin: 1.05, elev: 5, azMode: 'view' },
+  /* "Their legs dangle like puppets" is a claim about MOTION. A still frame
+     cannot show foot skate or a floating stance; a phase-locked strip can,
+     and the per-frame foot telemetry under it turns the argument into
+     millimetres. */
+  anim:   { custom: 'anim', distM: 4.6, margin: 1.10, elev: 4, azMode: 'view' },
+  /* Proportion error is invisible without a reference. 1.83 m mannequin,
+     1.20 m crate, operator, one frame, floor grid at 1 m. */
+  scale:  { custom: 'scale', distM: 6.2, margin: 1.06, elev: 3, azMode: 'view', props: 0 }
+};
+
+
+/* Key azimuth for the whole run: decided once, before the probe bakes.
+   A cell-local key would need a probe rebuild per cell (~0.3 s), so a sheet
+   always uses one fixed key -- which is also what makes a sheet comparable. */
+/* 52 degrees off the CAMERA axis, 34 up: a textbook three-quarter key.
+   Neither number is taste.  The ground shadow lies along keyAz+180, so a key
+   on the camera axis hides its own shadow behind the subject and the one
+   thing a critic most needs to see -- does the figure make contact with the
+   floor -- becomes unjudgeable.  And the offset is measured from the CAMERA,
+   not from the view parameter, because a close-up looks at the subject from
+   somewhere quite different (the `hands` cell sits 75 degrees off the bore);
+   keying off `view` there put the light behind the camera-side hand and the
+   grip went to silhouette.  The whole sheet shares one key -- the IBL probe
+   bakes once -- so it is predicted from the FIRST cell and every cell after
+   it is lit consistently, which is what makes a sheet comparable. */
+var KEY_EL = num('keyel', 34);
+function predictCamAz(spec) {
+  var cd = CELLS[spec.cell] || CELLS.full, v = viewAz(spec.view);
+  if (cd.azMode === 'body') return 0 + (cd.azRel || 0);
+  return v + (cd.azRel || 0);      /* weapon-mode: the bore follows the view */
+}
+/* env=level does not get to choose its key: the azimuth is the one the level
+   author set, because "would this operator read on THAT wall in THAT light" is
+   the only question the level rig exists to answer. */
+var KEY_AZ = num('keyaz', isLev ? LR.keyAz : (predictCamAz(PLAN[0]) + 52));
+if (isLev) KEY_EL = num('keyel', 34);
+aimKey(KEY_AZ, KEY_EL);
+window.__mark('lights');
+
+/* ============================================================== install */
+NZ.ctx.THREE = THREE; NZ.ctx.renderer = renderer; NZ.ctx.scene = scene; NZ.ctx.camera = camera;
+NZ.ctx.lights = { ambient: ambient, skyFill: skyFill, sunKey: sunKey, coolRim: coolRim };
+var installErr = null;
+try { NZ.call('rendererInit', NZ.ctx); } catch (e) { installErr = e; cwarn('rendererInit threw: ' + e.message); }
+window.__mark('rendererInit');
+
+/* ======================================================= CALIB: the stop ==
+   The bug this replaces: the stage ran nz-render's LEVEL light rig -- key
+   3.80, probe 0.28 -- and an 18% grey ball came out at 204/255.  Two stops
+   hot.  Every albedo judged from those images was judged against a lie, and
+   the rig agent was reading them.
+
+   THE TONE CURVE IS NOT THE PROBLEM AND IS NOT TOUCHED.  Push a scene-linear
+   0.180 through nz-render's own composite -- exposure 0.95/0.6, the ACES RRT
+   fit, contrast 0.16, sRGB OETF -- and it lands on 119/255 = 0.4665 sRGB,
+   which is an 18% grey card's own code value to within half a code.  The
+   curve already maps 18% to 18%.  Only the LIGHT was wrong, so only the light
+   is changed: `P.exposure` is left at the shipping 0.95 and this stage is
+   judging the same stop the game ships.
+
+   The rig is then specified the way a photographer specifies one -- as ratios
+   to a key, with the exposure fixed:
+
+     * an 18% grey card FACING THE LENS renders at 18% grey (119/255).  This
+       is the card the whole thing is graded on, because it is the geometry a
+       critic actually reads albedo in: an operator's chest faces the lens, so
+       a fatigue that measures 30% in the image really is a 30% albedo.
+     * key : fill = 3 : 1 at that card.  CS2-BRIEF: "a single dominant key
+       ... bounce/ambient from an IBL probe rather than a flat ambient term".
+       Under 2:1 an image reads as flat ambient; far over 3:1 and the shadow
+       side falls off the bottom of the curve.
+     * the key-normal tab then lands at 161/255 and a 90% white at 223/255 --
+       real highlight headroom, nothing clipped.
+
+   The two constants are SOLVED from measurement, not guessed.  Measured on
+   this stage at keyIntensity 1.275 / envIrradiance 0.313, on 18% tabs of true
+   linear albedo, with the key 52 deg off the camera azimuth and 34 deg up
+   (so the grey card sees the key at cos 52 * cos 34 = 0.510):
+
+       grey card, lens-facing     x1.061 of albedo   (key + fill)
+       key-perpendicular tab      x0.399 of albedo   (fill alone, N.L = 0)
+       => key at the card = 0.662, i.e. 0.519 per unit of keyIntensity
+          fill             = 0.399, of which nz-render's ambient floor
+                             (0.045) is ~0.032, so the probe returns
+                             1.172 * envIrradiance at this orientation.
+
+   Solving key = 0.750 and fill = 0.250 (3:1, summing to 1.000):
+
+       keyIntensity  = 0.750 / 0.519          = 1.445
+       envIrradiance = (0.250 - 0.032) / 1.172 = 0.186
+
+   Every one of those numbers is re-checked on every calib render:
+   measureCalib() reads the finished pixels back and burns the measured stop
+   error and the measured key:fill into the image, in red when they drift. */
+var CALIB = {
+  targetMul: 1.000,          /* scene-linear multiplier on a lens-facing 18%  */
+  ratio: 3.0,                /* key : fill at that card                       */
+  key: 1.445,                /* -> P.keyIntensity                             */
+  env: 0.186,                /* -> P.envIrradiance (probe mean radiance)      */
+  tol: 0.25                  /* stops of error before the cell shouts         */
+};
+var KEY_I = num('keyi', CALIB.key), ENV_I = num('envi', CALIB.env);
+var CALIB_ON = (ENVMODE === 'studio');
+if (CALIB_ON && NZ.render && NZ.render.params) {
+  var PR = NZ.render.params;
+  CALIB.was = { key: PR.keyIntensity, env: PR.envIrradiance, el: PR.sunElevation };
+  PR.keyIntensity = KEY_I;
+  PR.envIrradiance = ENV_I;
+  /* applyLighting() re-aims the sun to P.sunElevation and keeps only the
+     azimuth, so ?keyel= was being silently discarded before this line. */
+  PR.sunElevation = KEY_EL;
+  if (num('keyi', -1) >= 0 || num('envi', -1) >= 0)
+    cwarn('STUDIO KEY OVERRIDDEN (keyi=' + KEY_I + ' envi=' + ENV_I + ') - not the calibrated rig');
+} else if (!CALIB_ON) {
+  CALIB.was = NZ.render && NZ.render.params
+    ? { key: NZ.render.params.keyIntensity, env: NZ.render.params.envIrradiance, el: NZ.render.params.sunElevation } : null;
+}
+
+try { NZ.call('ready', NZ.ctx); } catch (e) { installErr = e; cwarn('ready threw: ' + e.message); }
+window.__mark('ready');
+
+if (!NZ.flags.enemies) cwarn('nz-enemies DID NOT INSTALL (NZ.flags.enemies=false) - every cell below is the stock path or empty');
+if (USE_R && !NZ.flags.render) cwarn('nz-render DID NOT INSTALL - lighting/post is the raw three.js forward path');
+
+/* Exposure is nz-render's to own and the default here is UNTOUCHED, because a
+   studio that quietly re-exposes the frame is a studio that cannot be used to
+   judge exposure. `ev=` exists only so a critic can answer "is that washed-out
+   fatigue the albedo or the stop?" in one extra render -- and when it is used
+   the header says so. */
+var EV = num('ev', 0);
+if (EV && NZ.render && NZ.render.params) {
+  NZ.render.params.exposure *= Math.pow(2, EV);
+  cwarn('EXPOSURE OVERRIDDEN BY ' + (EV > 0 ? '+' : '') + EV + ' EV - this is NOT the shipping look');
+}
+
+/* Swing the whole calibration array to face the LENS, then aim the two tabs
+   down the key vector.  A grey card is a camera-facing instrument -- read it
+   edge-on to the key and it measures nothing but the fill, which is exactly
+   the mistake that made the first version of this stage disagree with itself
+   by two and a half stops between two patches of the same paint. */
+function orientProps(camAzDeg) {
+  STAGE.props.rotation.y = camAzDeg * Math.PI / 180;
+  STAGE.props.updateMatrixWorld(true);
+  var a = KEY_AZ * Math.PI / 180, el = KEY_EL * Math.PI / 180;
+  var d = new THREE.Vector3(Math.sin(a) * Math.cos(el), Math.sin(el), Math.cos(a) * Math.cos(el));
+  var aim = function (o, dir) {
+    if (!o) return;
+    var w = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
+    o.lookAt(w.add(dir));
+  };
+  aim(CALIB_KEYTAB, d);
+  /* horizontal, exactly perpendicular to the key, and turned towards the lens
+     of the two choices so it is actually in the picture */
+  var perp = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize();
+  var camDir = new THREE.Vector3(Math.sin(camAzDeg * Math.PI / 180), 0, Math.cos(camAzDeg * Math.PI / 180));
+  if (perp.dot(camDir) < 0) perp.negate();
+  aim(CALIB_FILLTAB, perp);
+  STAGE.props.updateMatrixWorld(true);
+}
+
+/* ----------------------------------------------------------- measurement --
+   Read the finished frame back and check the arithmetic.  Every PROBE entry
+   knows its true linear albedo; project it, average a small window of the
+   pixels that actually got drawn, and report the error in STOPS.  A studio
+   whose numbers are not checked is a studio that drifts.
+   `_pix` is the raw readback (bottom-up RGBA, pre-downsample) filled by
+   blitGL(), so this costs nothing extra. */
+function sampleRaw(v3, half) {
+  if (!_pix) return null;
+  var p = v3.clone().project(camera);
+  var sx = Math.round((p.x * 0.5 + 0.5) * RW), sy = Math.round((p.y * 0.5 + 0.5) * RH);
+  if (!isFinite(sx) || !isFinite(sy) || sx < 1 || sy < 1 || sx >= RW - 1 || sy >= RH - 1) return null;
+  var h = half || 3, n = 0, r = 0, g = 0, b = 0;
+  for (var y = Math.max(0, sy - h); y <= Math.min(RH - 1, sy + h); y++)
+    for (var x = Math.max(0, sx - h); x <= Math.min(RW - 1, sx + h); x++) {
+      var i = (y * RW + x) * 4;
+      r += _pix[i]; g += _pix[i + 1]; b += _pix[i + 2]; n++;
+    }
+  if (!n) return null;
+  return { r: r / n / 255, g: g / n / 255, b: b / n / 255, x: sx, y: sy };
+}
+/* forward model of nz-render's composite for a NEUTRAL scene-linear value:
+   exposure -> ACES RRT fit -> display S curve -> sRGB.  Neutral only, which
+   is all a grey card needs, and both ACES matrices are row-normalised so a
+   grey in is a grey out. */
+function forwardTone(sceneLinear) {
+  var P = (NZ.render && NZ.render.params) || { exposure: 0.95, tonemap: 'aces', contrast: 0.16 };
+  var e = P.exposure * (P.tonemap === 'aces' ? (1 / 0.6) : (P.tonemap === 'neutral' ? 1.35 : 1.05));
+  var c = Math.max(0, sceneLinear) * e;
+  if (P.tonemap === 'aces') {
+    var a = c * (c + 0.0245786) - 0.000090537;
+    var b = c * (0.983729 * c + 0.4329510) + 0.238081;
+    c = Math.min(1, Math.max(0, a / b));
+  } else c = Math.min(1, c);
+  c = c + (P.contrast || 0) * (c * c * (3 - 2 * c) - c);
+  return linToSrgb(Math.min(1, Math.max(0, c)));
+}
+/* invert it by bisection: 40 iterations of a monotone scalar, microseconds */
+function inverseTone(srgb) {
+  var lo = 0, hi = 24, mid = 0;
+  for (var i = 0; i < 40; i++) { mid = (lo + hi) / 2; if (forwardTone(mid) < srgb) lo = mid; else hi = mid; }
+  return mid;
+}
+var CALIBRESULT = null;
+function measureCalib() {
+  var out = { probes: [], mode: ENVMODE, key: null, card: null, fill: null, err: null, ratio: null };
+  for (var i = 0; i < PROBE.length; i++) {
+    var p = PROBE[i];
+    p.obj.updateMatrixWorld(true);
+    /* window scaled to the render, but never so wide it can touch a neighbour:
+       the smallest probe is a 75 mm ColorChecker chip */
+    var s = sampleRaw(new THREE.Vector3().setFromMatrixPosition(p.obj.matrixWorld),
+      Math.max(2, Math.round(RW * 0.005)));
+    if (!s) continue;
+    /* Rec.709 luma of the DISPLAY value, inverted back through the curve to
+       the scene-linear radiance that must have produced it */
+    var lumaSrgb = linToSrgb(0.2126 * srgbToLin(s.r) + 0.7152 * srgbToLin(s.g) + 0.0722 * srgbToLin(s.b));
+    var lin = inverseTone(lumaSrgb);
+    /* A probe turned more than 75 degrees from the lens is edge-on: the sample
+       is mostly whatever is behind it, and reporting that as a measurement is
+       worse than reporting nothing.  This bites in env=level, where the key
+       azimuth is the level author's and can sit 90 degrees off the camera --
+       the key-normal tab then faces away and reads the backdrop. */
+    var nrm = new THREE.Vector3(0, 0, 1).applyQuaternion(p.obj.getWorldQuaternion(new THREE.Quaternion()));
+    var toCam = camera.position.clone().sub(new THREE.Vector3().setFromMatrixPosition(p.obj.matrixWorld)).normalize();
+    var facing = nrm.dot(toCam);
+    var rec = { name: p.name, a: p.a, srgb: +(lumaSrgb * 255).toFixed(0), lin: +lin.toFixed(4),
+                mul: p.a > 0 ? +(lin / p.a).toFixed(3) : 0, face: p.face,
+                clip: (s.r > 0.985 && s.g > 0.985 && s.b > 0.985) ? 1 : 0,
+                oblique: facing < 0.26 ? 1 : 0,
+                rgb: [+(s.r * 255).toFixed(0), +(s.g * 255).toFixed(0), +(s.b * 255).toFixed(0)] };
+    out.probes.push(rec);
+    if (p.face === 'key') out.key = rec;
+    if (p.face === 'fill') out.fill = rec;
+    /* THE number.  An 18% grey card, facing the lens, under a 52-degree key:
+       the classic exposure reference, and the one the brief asks for. */
+    if (p.face === 'card') { out.card = rec; out.err = +(Math.log(rec.mul / CALIB.targetMul) / Math.LN2).toFixed(2); }
+  }
+  /* key : fill AT THE GREY CARD, measured rather than declared.  The
+     key-perpendicular tab gives the fill on its own, so subtracting it from
+     the card leaves the key and nothing else. */
+  if (out.card && out.fill && out.fill.mul > 1e-4)
+    out.ratio = +((out.card.mul - out.fill.mul) / out.fill.mul).toFixed(2);
+  var k = out.card || out.key;
+  if (k) out.wb = +((k.rgb[0] - k.rgb[2]) / 2.55).toFixed(1);
+  /* how far the key sits off the viewing axis: without this number a
+     key:fill of 0.1:1 looks like a broken light rather than what it is --
+     a subject lit from 90 degrees to the side */
+  try {
+    var a2 = KEY_AZ * Math.PI / 180, e2 = KEY_EL * Math.PI / 180;
+    var kd = new THREE.Vector3(Math.sin(a2) * Math.cos(e2), Math.sin(e2), Math.cos(a2) * Math.cos(e2));
+    var vd = camera.getWorldDirection(new THREE.Vector3()).negate();
+    out.keyOffAxis = Math.round(Math.acos(Math.max(-1, Math.min(1, kd.dot(vd)))) * 180 / Math.PI);
+  } catch (e2b) { out.keyOffAxis = null; }
+  CALIBRESULT = out;
+  INFO.calib = out;
+  if (out.err !== null && Math.abs(out.err) > CALIB.tol)
+    cwarn('CALIBRATION OFF BY ' + (out.err > 0 ? '+' : '') + out.err + ' STOPS (18% grey card renders ' +
+      out.card.srgb + '/255, wanted ' + Math.round(forwardTone(0.18) * 255) + ')');
+  else if (out.err === null) cwarn('CALIBRATION NOT MEASURED - the grey card was not in frame');
+  if (out.ratio !== null && out.ratio < 2.0)
+    cwarn('KEY:FILL is ' + out.ratio + ':1 - under 2:1 the image reads as flat ambient (CS2-BRIEF wants one dominant key)');
+  return out;
+}
+
+/* nz-render re-aims the sun to its own elevation and pushes the shadow camera
+   out to level scale (extent ~70 units).  For a single 1.8 m subject that is
+   ~0.07 u/texel: fine, but the frustum then wastes most of its depth range on
+   empty ground, so pull it back in around the stage. */
+function tightenShadow() {
+  var e = M(3.4);
+  var c = sunKey.shadow.camera;
+  c.left = -e; c.right = e; c.top = e; c.bottom = -e;
+  c.near = M(1); c.far = SUN_D + e * 3;
+  c.updateProjectionMatrix();
+  if (sunKey.shadow.map && sunKey.shadow.map.width < 2048) { sunKey.shadow.map.dispose(); sunKey.shadow.map = null; }
+  sunKey.shadow.mapSize.set(2048, 2048);
+}
+
+/* =============================================================== entities */
+/* Shaped exactly like NUKEM.html spawnEnemy()'s product.  Everything the rig
+   reads must exist and be the right type. */
+function makeEntity(kind) {
+  var cfg = ECFG[kind];
+  var e = {
+    kind: kind, cfg: cfg,
+    mesh: { visible: false, position: new THREE.Vector3(), rotation: new THREE.Euler(), scale: new THREE.Vector3(1, 1, 1), material: {} },
+    mat: {},
+    x: 0, y: 0, z: 0,
+    hp: cfg.hp, state: 'idle', slot: -1, mir: false, face: 0,
+    vx: 0, vz: 0, gait: 0.137, speedSm: 0, turnV: 0, lean: 0, crouch: 0,
+    animT: 0, atkT: 0, atkTotal: 0.42, coolT: 0,
+    painT: 0, hitT: 0, hitLean: 0, recoilT: 0, muzzlePulse: 0,
+    dead: false, deathT: 0, deathSide: 1, deathSettled: false,
+    litT: 0, wander: 0.7, strafe: 1, strafeT: 0,
+    stuckT: 0, shadowKick: 0, foleyT: 3.1,
+    rig: null, rigActive: false, rigVariant: 0,
+    fired: false, vang: 0, vmir: false, footStamp: 0
+  };
+  e.cy = function () { return e.y + cfg.h * 0.52 + (cfg.float || 0); };
+  e.hh = function () { return cfg.h * 0.5; };
+  return e;
+}
+
+var ENT = {};   /* kind -> entity, built lazily and reused across cells */
+function getEntity(kind) {
+  if (ENT[kind]) return ENT[kind];
+  if (!ECFG[kind]) return null;
+  var e = makeEntity(kind);
+  enemies.push(e);
+  var rig = null;
+  try { rig = NZ.first('createEnemyRig', e); } catch (err) { cwarn(kind + ': createEnemyRig threw ' + err.message); }
+  if (!rig) { e.__fail = 'createEnemyRig returned nothing'; ENT[kind] = e; return e; }
+  e.rig = rig; e.rigActive = true;
+  if (!rig.muzzleWorld) rig.muzzleWorld = new THREE.Vector3();
+  if (rig.muzzleReady === undefined) rig.muzzleReady = false;
+  rig.root.visible = true;
+  ENT[kind] = e;
+  return e;
+}
+
+/* Force maximum LOD.  lodPass() picks a tier from camera distance and a global
+   budget; a critic looking at a 900 px close-up must be looking at LOD0, which
+   is what the player sees when the operator is in his face. */
+function forceLod0(e) { if (e && e._nz) e._nz.wantTier = 0; }
+
+function charOf(e) {
+  var out = null;
+  if (!e || !e.rig || !e.rig.root) return null;
+  e.rig.root.traverse(function (o) { if (!out && o.isSkinnedMesh) out = o; });
+  return out;
+}
+function boneMapOf(e) {
+  var m = {};
+  if (!e || !e.rig || !e.rig.root) return m;
+  e.rig.root.traverse(function (o) { if (o.isBone || (o.type === 'Bone')) m[o.name] = o; });
+  if (!Object.keys(m).length) {
+    var sk = charOf(e);
+    if (sk && sk.skeleton) sk.skeleton.bones.forEach(function (b) { m[b.name] = b; });
+  }
+  return m;
+}
+/* C3 first, scene-graph second: never hard-code an internal path */
+var _bw = new THREE.Vector3();
+function boneWorld(e, name) {
+  if (NZ.enemies && NZ.enemies.boneWorld) {
+    var v = NZ.enemies.boneWorld(e, name);
+    if (v) return v.clone ? v.clone() : new THREE.Vector3(v.x, v.y, v.z);
+  }
+  var b = boneMapOf(e)[name];
+  if (!b) return null;
+  e.rig.root.updateMatrixWorld(true);
+  return new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+}
+
+/* ================================================================= poses */
+/* Every pose is driven by FRAME COUNT, never by the wall clock: the entity is
+   integrated at a fixed 1/60 s step and the rig's own hooks are called exactly
+   as presentEnemy() calls them.  The walk / run cycles are advanced by moving
+   e.x -- the rig derives stride phase from distance travelled, so driving it
+   any other way would produce foot skate that the game does not have. */
+var DT = 1 / 60;
+
+function poseSpec(pose, e) {
+  var cfg = e.cfg;
+  switch (pose) {
+    case 'idle':   return { speed: 0, state: 'idle',   frames: 150, gaitStop: null };
+    case 'aim':    return { speed: 0, state: 'attack', frames: 150, gaitStop: null, attack: true };
+    case 'crouch': return { speed: 0, state: 'attack', frames: 170, gaitStop: null, attack: true, crouch: 1 };
+    case 'walk':   return { speed: cfg.spd * 0.40, state: 'chase', frames: 150, gaitStop: 0.26 };
+    case 'run':    return { speed: cfg.spd * 1.00, state: 'chase', frames: 150, gaitStop: 0.30 };
+    case 'turn':   return { speed: cfg.spd * 0.16, state: 'chase', frames: 130, turn: 1 };
+    case 'dead':   return { speed: 0, state: 'idle',   frames: 40, death: 150 };
+    default:       return { speed: 0, state: 'attack', frames: 150, attack: true };
+  }
+}
+
+function resetEntity(e) {
+  e.x = 0; e.y = 0; e.z = 0; e.face = 0; e.lean = 0; e.turnV = 0; e.crouch = 0;
+  e.state = 'idle'; e.dead = false; e.deathT = 0; e.deathSettled = false;
+  e.hp = e.cfg.hp; e.painT = 0; e.hitT = 0; e.recoilT = 0; e.muzzlePulse = 0;
+  e.atkT = 0; e.atkTotal = 0.42; e.fired = false; e.speedSm = 0; e.vx = 0; e.vz = 0;
+  var st = e._nz;
+  if (st) {
+    st.px = 0; st.pz = 0; st.pvalid = false; st.lastNow = 0;
+    st.rag = null; st.ragPose = null;
+    if (st.gait !== undefined) st.gait = 0.137;
+  }
+}
+
+/* the player is the thing the operator aims at: put it where the camera will
+   be, at eye height, so the sight line runs toward the viewer for `aim` */
+function placeTarget(azDeg, dist) {
+  var a = azDeg * Math.PI / 180;
+  player.x = Math.sin(a) * dist; player.z = Math.cos(a) * dist; player.y = 0;
+}
+
+/* opt: { phase, frames, noReset }.  The animation strip needs to stop the
+   SAME continuous walk at N successive gait phases; resetting between them
+   would restart the stride integrator and the strip would no longer be one
+   cycle. */
+function drivePose(e, pose, azDeg, opt) {
+  opt = opt || {};
+  var sp = poseSpec(pose, e);
+  if (opt.phase !== undefined) sp.gaitStop = opt.phase;
+  if (opt.frames !== undefined) sp.frames = opt.frames;
+  if (!opt.noReset) resetEntity(e);
+  placeTarget(azDeg, M(9));
+  e.state = sp.state;
+  if (sp.crouch) e.crouch = 1;
+  var dirX = Math.sin(0), dirZ = Math.cos(0);       /* travels along +Z, faces +Z */
+  var n = 0, now = 0, maxN = sp.frames + 240;
+  var hitTarget = false;
+  for (n = 0; n < maxN; n++) {
+    now = n * DT;
+    forceLod0(e);
+    if (sp.attack) {
+      e.atkT = 0.30 + 0.10 * Math.sin(n * 0.07);      /* held in the wind-up */
+      e.fired = false;
+    }
+    if (sp.turn) {
+      var rate = Math.min(e.cfg.turn * 0.55, 3.0);
+      e.face += rate * DT; e.turnV = rate;
+      /* keep the aim target in front so the head leads the turn */
+      placeTarget(azDeg, M(9));
+    }
+    if (sp.speed > 0) {
+      var v = sp.speed;
+      e.vx = dirX * v; e.vz = dirZ * v;
+      e.x += e.vx * DT; e.z += e.vz * DT;
+    }
+    e.speedSm += (Math.min(1, sp.speed / Math.max(1, e.cfg.spd)) - e.speedSm) * Math.min(1, DT * 9);
+    try { NZ.first('animateEnemyRig', e, sp.speed, now); }
+    catch (err) { e.__fail = 'animateEnemyRig threw: ' + err.message; break; }
+    if (n >= sp.frames) {
+      if (sp.gaitStop === null || sp.gaitStop === undefined) { hitTarget = true; break; }
+      var g = (e._nz && e._nz.gait !== undefined) ? e._nz.gait : e.gait;
+      var fr = g - Math.floor(g);
+      if (Math.abs(fr - sp.gaitStop) < 0.012 || (e.__lastFr !== undefined && e.__lastFr < sp.gaitStop && fr >= sp.gaitStop)) { hitTarget = true; e.__lastFr = undefined; break; }
+      e.__lastFr = fr;
+    }
+  }
+  if (!hitTarget && sp.gaitStop != null) cwarn(pose + '/' + e.kind + ': never reached gait phase ' + sp.gaitStop);
+
+  if (sp.death) {
+    e.dead = true; e.deathT = 0;
+    try { NZ.call('enemyKilled', e, 40, { x: 0, y: 0.1, z: -1 }, { x: e.x, y: e.y + M(1.35), z: e.z + M(0.2) }); }
+    catch (err) { cwarn('enemyKilled threw: ' + err.message); }
+    for (var d = 0; d < sp.death; d++) {
+      e.deathT += DT;
+      var t = Math.min(1, e.deathT / 0.46), fall = t * t * (3 - 2 * t);
+      forceLod0(e);
+      try { NZ.first('animateEnemyRigDeath', e, t, fall); }
+      catch (err2) { e.__fail = 'animateEnemyRigDeath threw: ' + err2.message; break; }
+    }
+  }
+  /* re-centre: the walk/run cycles translate the actor, but the stage and the
+     shadow frustum are built around the origin.  Move the ROOT, not the phase:
+     shifting e.x here would inject one frame of enormous travel into the
+     stride integrator the next time this entity is posed. */
+  if (e.rig && e.rig.root) {
+    e.rig.root.position.x -= e.x; e.rig.root.position.z -= e.z;
+    e.rig.root.updateMatrixWorld(true);
+  }
+  return sp;
+}
+
+/* ============================================================== framing */
+var _c = [];
+for (var ci = 0; ci < 8; ci++) _c.push(new THREE.Vector3());
+function boxCorners(box) {
+  var i = 0;
+  for (var a = 0; a < 2; a++) for (var b = 0; b < 2; b++) for (var d = 0; d < 2; d++)
+    _c[i++].set(a ? box.max.x : box.min.x, b ? box.max.y : box.min.y, d ? box.max.z : box.min.z);
+  return _c;
+}
+/* Framing is DISTANCE-first, then focal length, and it is solved in CAMERA
+   space, not world space.
+   Two lessons paid for in bad contact sheets:
+   (1) A fov-first fit puts the camera wherever the maths lands; on a portrait
+       frame a wide-but-short subject (two hands on a rifle) ends up 4 m away
+       filling a fifth of the picture -- technically a close-up, useless.  So
+       each cell declares the standoff a photographer would shoot it from, in
+       METRES, and the focal length is solved to fill the frame at that
+       distance whatever the output aspect ratio.
+   (2) A world-axis-aligned bounding box of a diagonal object (a rifle held at
+       35 degrees) is up to 40% larger than the object, and every pixel of that
+       is wasted frame.  Extents are therefore measured along the camera's own
+       right/up/forward axes. */
+function camBasis(azDeg, elevDeg) {
+  var a = azDeg * Math.PI / 180, el = (elevDeg || 0) * Math.PI / 180;
+  var dir = new THREE.Vector3(Math.sin(a) * Math.cos(el), Math.sin(el), Math.cos(a) * Math.cos(el)).normalize();
+  var up0 = Math.abs(dir.y) > 0.985 ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(0, 1, 0);
+  var right = new THREE.Vector3().crossVectors(up0, dir).normalize();
+  var up = new THREE.Vector3().crossVectors(dir, right).normalize();
+  return { dir: dir, right: right, up: up };
+}
+
+function framePoints(pts, pad, azDeg, elevDeg, opt) {
+  camera.aspect = RW / RH;
+  var B = camBasis(azDeg, elevDeg), o = pts[0], t = new THREE.Vector3();
+  var mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9, mnz = 1e9, mxz = -1e9, i;
+  for (i = 0; i < pts.length; i++) {
+    t.copy(pts[i]).sub(o);
+    var lx = t.dot(B.right), ly = t.dot(B.up), lz = t.dot(B.dir);
+    if (lx < mnx) mnx = lx; if (lx > mxx) mxx = lx;
+    if (ly < mny) mny = ly; if (ly > mxy) mxy = ly;
+    if (lz < mnz) mnz = lz; if (lz > mxz) mxz = lz;
+  }
+  pad = pad || 0;
+  mnx -= pad; mxx += pad; mny -= pad; mxy += pad; mnz -= pad; mxz += pad;
+  var hx = (mxx - mnx) / 2, hy = (mxy - mny) / 2, hz = (mxz - mnz) / 2;
+  var c = o.clone()
+    .addScaledVector(B.right, (mnx + mxx) / 2)
+    .addScaledVector(B.up, (mny + mxy) / 2)
+    .addScaledVector(B.dir, (mnz + mxz) / 2);
+  var size = 2 * Math.hypot(hx, hy, hz);
+  var margin = opt.margin || 1.08;
+  var fov = opt.fov, D, sx, sy, sz, depth, need = 0;
+
+  if (!fov) {
+    D = M(opt.distM || 4) + hz;
+    for (sx = -1; sx <= 1; sx += 2) for (sy = -1; sy <= 1; sy += 2) for (sz = -1; sz <= 1; sz += 2) {
+      depth = Math.max(M(0.10), D - sz * hz);
+      need = Math.max(need, Math.abs(sy * hy) / depth, Math.abs(sx * hx) / (depth * camera.aspect));
+    }
+    fov = 2 * Math.atan(need * margin) * 180 / Math.PI;
+    fov = Math.min(Math.max(fov, opt.fovMin || 13), opt.fovMax || 52);
+  }
+  if (FOV_OVERRIDE) fov = FOV_OVERRIDE;
+  camera.fov = fov;
+  var vt = Math.tan(fov * Math.PI / 360), ht = vt * camera.aspect;
+
+  /* exact fit at that focal length */
+  var Dfit = 0;
+  for (sx = -1; sx <= 1; sx += 2) for (sy = -1; sy <= 1; sy += 2) for (sz = -1; sz <= 1; sz += 2)
+    Dfit = Math.max(Dfit, sz * hz + Math.abs(sx * hx) / ht, sz * hz + Math.abs(sy * hy) / vt);
+  D = Math.max(Dfit * margin, size * 0.55 + 0.05);
+
+  camera.position.copy(c).addScaledVector(B.dir, D);
+  camera.up.set(0, 1, 0);
+  camera.lookAt(c);
+  camera.near = Math.max(0.05, D - hz - size * 0.35);
+  camera.far = D + size * 6 + M(70);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld(true);
+  return { dist: D, centre: c, dir: B.dir, fov: fov, half: [hx, hy, hz] };
+}
+
+function pointsOfBones(e, names) {
+  var out = [];
+  for (var i = 0; i < names.length; i++) {
+    var p = boneWorld(e, names[i]);
+    if (p) out.push(p);
+  }
+  return out.length ? out : null;
+}
+/* A SkinnedMesh's own bounding box is the BIND pose and is useless here, so
+   the posed extent comes from the bones -- every one of them, so a rig that
+   grows a new limb still frames correctly -- plus the sole of the boot, which
+   no bone reaches. */
+function pointsOfRig(e) {
+  var bm = boneMapOf(e), out = [], n;
+  e.rig.root.updateMatrixWorld(true);
+  for (n in bm) out.push(new THREE.Vector3().setFromMatrixPosition(bm[n].matrixWorld));
+  if (!out.length) {
+    var b = new THREE.Box3().setFromObject(e.rig.root);
+    if (b.isEmpty()) return null;
+    out.push(b.min.clone(), b.max.clone());
+    return out;
+  }
+  var lo = out[0].y;
+  for (var i = 1; i < out.length; i++) if (out[i].y < lo) lo = out[i].y;
+  out.push(new THREE.Vector3(e.rig.root.position.x, e.rig.root.position.y, e.rig.root.position.z));
+  return out;
+}
+/* How tall is this operator, really?
+   Three candidates, none of which is free:
+     - ECFG.h is the number somebody typed, not the number that got built.
+     - geometry.boundingBox is the BIND pose, but for a standing idle that is
+       within a few millimetres of the posed height and it is exact.
+     - SkinnedMesh.boneTransform() would give the true posed silhouette, and it
+       is what this used to do -- but on this rig it returns values in the tens
+       of millions (the skin attributes come back through fromBufferAttribute
+       in a form it does not expect), so it is guarded and discarded rather
+       than trusted.  A wrong measurement on a ruler cell is worse than none.
+   So: bind-pose geometry height, cross-checked against the posed BONE extent,
+   and the label says which one it is. */
+function measuredExtent(e) {
+  var sk = charOf(e);
+  if (!sk || !sk.geometry) return null;
+  var out = { mode: null, top: 0, low: 0 };
+  sk.updateMatrixWorld(true);
+  var scaleY = new THREE.Vector3().setFromMatrixScale(sk.matrixWorld).y || 1;
+  if (!sk.geometry.boundingBox) sk.geometry.computeBoundingBox();
+  var bb = sk.geometry.boundingBox;
+  if (bb && isFinite(bb.max.y) && isFinite(bb.min.y)) {
+    var h = (bb.max.y - bb.min.y) * scaleY;
+    if (h > SCALE * 0.5 && h < SCALE * 3.5) {
+      out.mode = 'bind-pose mesh'; out.low = 0; out.top = h; return out;
+    }
+  }
+  var pts = pointsOfRig(e);
+  if (!pts || !pts.length) return null;
+  var top = -1e9, low = 1e9;
+  for (var i = 0; i < pts.length; i++) {
+    if (!isFinite(pts[i].y)) continue;
+    if (pts[i].y > top) top = pts[i].y;
+    if (pts[i].y < low) low = pts[i].y;
+  }
+  if (top < -1e8 || (top - low) > SCALE * 3.5) return null;
+  out.mode = 'bone extent'; out.low = low; out.top = top;
+  return out;
+}
+
+/* every 6th vertex of a mesh, in world space -- enough to bound it exactly
+   for framing without walking 30k positions */
+function pointsOfMesh(mesh, stride) {
+  var pos = mesh.geometry.attributes.position, out = [], v = new THREE.Vector3();
+  var st = stride || 6;
+  for (var i = 0; i < pos.count; i += st) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrix);
+    out.push(v.clone());
+  }
+  return out.length ? out : null;
+}
+
+/* Cell recipes.  `distM` is the standoff a photographer would shoot this
+   detail from, in metres -- the fov follows from it (see frameBox).  `azFix`
+   is an ABSOLUTE camera azimuth: the operator still aims along the requested
+   `view`, so a fixed camera azimuth means "the gun points that way, look at
+   it from here", which is the only way to get both grips or the stock weld
+   into one frame reliably. */
+/* Longest chord of a point cloud: farthest point from the centroid, then the
+   farthest point from that.  Two passes, exact enough for an elongated body,
+   and it measures the GEOMETRY rather than trusting the spec table. */
+function longestChord(pts) {
+  var i, c = new THREE.Vector3();
+  for (i = 0; i < pts.length; i++) c.add(pts[i]);
+  c.multiplyScalar(1 / pts.length);
+  var a = pts[0], best = -1, d;
+  for (i = 0; i < pts.length; i++) { d = pts[i].distanceToSquared(c); if (d > best) { best = d; a = pts[i]; } }
+  var b = pts[0]; best = -1;
+  for (i = 0; i < pts.length; i++) { d = pts[i].distanceToSquared(a); if (d > best) { best = d; b = pts[i]; } }
+  return a.distanceTo(b);
+}
+var WEAPON_SPEC_MM = { trooper: 880, pig: 1005, enforcer: 840, octa: 1160 };
+
+/* Where is the gun actually pointing?  C3 first, then the hand-to-hand vector
+   (the support hand is forward on the handguard), then the requested view. */
+function weaponAzimuth(e, fallbackAz) {
+  try {
+    if (NZ.enemies && NZ.enemies.muzzleWorld) {
+      var mw = NZ.enemies.muzzleWorld(e);
+      if (mw && mw.d && Math.hypot(mw.d.x, mw.d.z) > 0.15) return Math.atan2(mw.d.x, mw.d.z) * 180 / Math.PI;
+    }
+  } catch (err) {}
+  var l = boneWorld(e, 'handL'), r = boneWorld(e, 'handR');
+  if (l && r) {
+    var dx = l.x - r.x, dz = l.z - r.z;
+    if (Math.hypot(dx, dz) > M(0.05)) return Math.atan2(dx, dz) * 180 / Math.PI;
+  }
+  return fallbackAz;
+}
+
+/* -------------------------------------------- weapon in isolation -------- */
+/* Not a mock-up: the triangles are lifted out of the REAL skinned geometry by
+   dominant skin weight on the 'weapon' bone, and placed with that bone's own
+   skinning matrix.  If the weapon turns out not to be rigidly bound the cell
+   says so instead of quietly showing something else. */
+var WEP_CACHE = {};
+function weaponMesh(e) {
+  var key = e.kind;
+  if (WEP_CACHE[key] !== undefined) return WEP_CACHE[key];
+  var out = null;
+  try {
+    var sk = charOf(e);
+    if (!sk || !sk.geometry || !sk.skeleton) throw new Error('no skinned mesh');
+    var geo = sk.geometry, sIdx = geo.attributes.skinIndex, sWgt = geo.attributes.skinWeight;
+    if (!sIdx || !sWgt) throw new Error('geometry carries no skin weights');
+    var bones = sk.skeleton.bones, wb = -1;
+    for (var i = 0; i < bones.length; i++) if (bones[i].name === 'weapon') { wb = i; break; }
+    if (wb < 0) throw new Error("no bone named 'weapon'");
+    /* read attributes through their raw arrays: BufferAttribute.getComponent
+       does not exist on every typed subclass in r149 */
+    var comp = function (attr) {
+      var arr = attr.array, its = attr.itemSize;
+      var d = attr.normalized ? (arr.BYTES_PER_ELEMENT === 1 ? 255 : 65535) : 1;
+      return function (i, k) { return arr[i * its + k] / d; };
+    };
+    var siA = sIdx.array, siN = sIdx.itemSize;
+    var swA = sWgt.array, swN = sWgt.itemSize;
+    var swD = sWgt.normalized ? (swA.BYTES_PER_ELEMENT === 1 ? 255 : 65535) : 1;
+    var n = sIdx.count, own = new Uint8Array(n);
+    for (i = 0; i < n; i++) {
+      var w = 0;
+      for (var k = 0; k < 4; k++) if (siA[i * siN + k] === wb) w += swA[i * swN + k] / swD;
+      own[i] = w > 0.55 ? 1 : 0;
+    }
+    var index = geo.index, tri = index ? index.count / 3 : geo.attributes.position.count / 3;
+    var keep = [];
+    for (var t = 0; t < tri; t++) {
+      var a = index ? index.getX(t * 3) : t * 3, b = index ? index.getX(t * 3 + 1) : t * 3 + 1, c = index ? index.getX(t * 3 + 2) : t * 3 + 2;
+      if (own[a] && own[b] && own[c]) keep.push(a, b, c);
+    }
+    if (keep.length < 90) throw new Error('only ' + (keep.length / 3) + ' of ' + tri + ' triangles are weapon-bound');
+    var g2 = new THREE.BufferGeometry();
+    var copy = function (name) {
+      var src = geo.attributes[name]; if (!src) return;
+      var it = src.itemSize, arr = new Float32Array(keep.length * it), g = comp(src);
+      for (var q = 0; q < keep.length; q++) for (var c2 = 0; c2 < it; c2++) arr[q * it + c2] = g(keep[q], c2);
+      g2.setAttribute(name, new THREE.BufferAttribute(arr, it));
+    };
+    copy('position'); copy('normal'); copy('uv'); copy('uv2'); copy('color');
+    var mesh = new THREE.Mesh(g2, sk.material);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.matrixAutoUpdate = false;
+    mesh.frustumCulled = false;
+    mesh.name = 'weapon-isolated-' + key;
+    mesh.userData.rebuild = function () {
+      sk.updateMatrixWorld(true);
+      var m = new THREE.Matrix4();
+      m.copy(sk.matrixWorld)
+        .multiply(sk.bindMatrixInverse)
+        .multiply(bones[wb].matrixWorld)
+        .multiply(sk.skeleton.boneInverses[wb])
+        .multiply(sk.bindMatrix);
+      mesh.matrix.copy(m);
+      mesh.matrixWorld.copy(m);
+      g2.computeBoundingBox(); g2.computeBoundingSphere();
+    };
+    mesh.userData.tris = keep.length / 3;
+    out = mesh;
+  } catch (err) {
+    cwarn('weapon isolation unavailable for ' + key + ': ' + err.message + ' (falling back to a tight crop of the held weapon)');
+    out = null;
+  }
+  WEP_CACHE[key] = out;
+  return out;
+}
+
+/* ========================================================= render size == */
+/* The animation strip renders N small frames rather than one big one, and a
+   full-buffer render per strip frame would cost N times the whole cell.
+   nz-render's ensureTargets() keys off renderer.getDrawingBufferSize(), so
+   resizing is enough -- it reallocates on the next frame by itself. */
+var BASE_W = RW, BASE_H = RH;
+function setRenderSize(w, h) {
+  w = Math.max(32, Math.round(w)); h = Math.max(32, Math.round(h));
+  if (w === RW && h === RH) return;
+  RW = w; RH = h;
+  renderer.setSize(w, h, false);
+  capRT.setSize(w, h);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  try { NZ.call('resize'); } catch (e) {}
+}
+
+/* ==================================================== scale reference ==== */
+/* Every number below is the CS2-ENEMY-BRIEF section-2 anthropometry table,
+   metres, times SCALE. Nothing here is eyeballed -- the whole point of the
+   cell is that it is a ruler, so if it is wrong the operator is measured
+   against a wrong ruler and the cell is worse than useless. */
+var SCALEREF = null;
+function chamferBox(w, h, d, cham, seg) {
+  var g = new THREE.BoxGeometry(w, h, d, seg || 4, seg || 4, seg || 4);
+  var p = g.attributes.position, hx = w / 2 - cham, hy = h / 2 - cham, hz = d / 2 - cham;
+  var v = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
+  for (var i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    c.set(Math.max(-hx, Math.min(hx, v.x)), Math.max(-hy, Math.min(hy, v.y)), Math.max(-hz, Math.min(hz, v.z)));
+    n.subVectors(v, c);
+    var L = n.length();
+    if (L > 1e-6) { n.multiplyScalar(cham / L); p.setXYZ(i, c.x + n.x, c.y + n.y, c.z + n.z); }
+  }
+  p.needsUpdate = true;
+  g.computeVertexNormals();
+  if (g.attributes.uv && !g.attributes.uv2) g.setAttribute('uv2', g.attributes.uv);
+  return g;
+}
+function buildScaleRef() {
+  if (SCALEREF) return SCALEREF;
+  var g = new THREE.Group();
+  /* mid grey, flat: this is a RULER, not a character. Anything with detail on
+     it would start competing with the operator for attention. */
+  var mm = stdMat(0x8a8d90, 0.82, 0);
+  var add = function (geo, x, y, z, rz) {
+    var m = new THREE.Mesh(geo, mm);
+    m.position.set(x, y, z); if (rz) m.rotation.z = rz;
+    m.castShadow = true; m.receiveShadow = true; g.add(m); return m;
+  };
+  var cyl = function (dia, len) { return new THREE.CylinderGeometry(M(dia / 2), M(dia / 2), M(len), 14); };
+  /* legs: ankle 0.07 -> knee 0.50 -> hip 0.94 */
+  for (var s = -1; s <= 1; s += 2) {
+    var hipX = M(0.09) * s;
+    add(cyl(0.115, 0.43), hipX, M(0.285), 0);            /* shin  0.07->0.50 */
+    add(cyl(0.155, 0.44), hipX, M(0.72), 0);             /* thigh 0.50->0.94 */
+    add(new THREE.BoxGeometry(M(0.10), M(0.07), M(0.27)), 0, 0, 0).position.set(hipX, M(0.035), M(0.04));
+  }
+  /* torso: hip 0.94 -> shoulder 1.50, biacromial 0.41 */
+  add(chamferBox(M(0.34), M(0.30), M(0.21), M(0.03), 3), 0, M(1.07), 0);   /* pelvis+abdomen */
+  add(chamferBox(M(0.41), M(0.32), M(0.23), M(0.04), 3), 0, M(1.37), 0);   /* thorax */
+  add(cyl(0.12, 0.11), 0, M(1.555), 0);                                    /* neck 1.50->1.61 */
+  /* head: 0.23 tall, 0.155 wide, top of skull must land on 1.83 */
+  var head = add(new THREE.SphereGeometry(M(0.115), 20, 14), 0, M(1.715), 0);
+  head.scale.set(0.155 / 0.23, 1, 0.20 / 0.23);
+  /* arms: upper 0.33, forearm 0.26, hand 0.19, hanging */
+  for (s = -1; s <= 1; s += 2) {
+    var sx = M(0.205) * s;
+    add(cyl(0.10, 0.33), sx, M(1.335), 0);               /* 1.50 -> 1.17 */
+    add(cyl(0.085, 0.26), sx, M(1.04), 0);               /* 1.17 -> 0.91 */
+    add(new THREE.BoxGeometry(M(0.09), M(0.19), M(0.045)), 0, 0, 0).position.set(sx, M(0.815), 0);
+  }
+  /* 1.20 m crate: the second reference, and the one that catches a rig that
+     is the right height but the wrong bulk */
+  var crate = new THREE.Mesh(chamferBox(M(1.20), M(1.20), M(1.20), M(0.022), 4),
+    stdMat(0x6b5a44, 0.88, 0));
+  crate.castShadow = true; crate.receiveShadow = true;
+  crate.position.set(0, M(0.60), 0);
+  var cg = new THREE.Group(); cg.add(crate);
+  SCALEREF = { mannequin: g, crate: cg };
+  scene.add(g); scene.add(cg);
+  g.visible = false; cg.visible = false;
+  return SCALEREF;
+}
+
+/* ======================================================= material lab ==== */
+/* The atlas is ONE 1024x1024 texture cut into sixteen 256 px tiles, and every
+   surface on every operator samples one of them. If they all look the same,
+   every operator looks the same. So: put each named tile on a chamfered cube
+   and a sphere, using the operator's OWN material instance -- same maps, same
+   roughness, same nz-render shader patch -- and change nothing but the UVs. */
+var MATLAB = null;
+var TILE_NAMES = ['cloth', 'camo', 'nylon', 'web', 'leather', 'rubber', 'knit', 'scrim',
+                  'plastic', 'painted', 'steel', 'gunmetal', 'skin', 'trim', 'lens', 'wound'];
+function remapUV(geo, reg) {
+  var uv = geo.attributes.uv; if (!uv || !reg) return geo;
+  var a = uv.array;
+  for (var i = 0; i < uv.count; i++) {
+    a[i * 2] = reg.u0 + a[i * 2] * reg.du;
+    a[i * 2 + 1] = reg.v0 + a[i * 2 + 1] * reg.dv;
+  }
+  uv.needsUpdate = true;
+  geo.setAttribute('uv2', uv);
+  /* the operator material declares vertexColors:true (nz-enemies multiplies a
+     per-part tint into the mesh). A geometry with no `color` attribute renders
+     BLACK against it, which looks exactly like a texturing bug and is not one,
+     so hand it a neutral white and let the atlas be the only variable. */
+  var n = geo.attributes.position.count, col = new Float32Array(n * 3);
+  for (i = 0; i < col.length; i++) col[i] = 1;
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
+}
+function buildMatLab(e) {
+  if (MATLAB) return MATLAB;
+  var sk = charOf(e);
+  var mat = sk ? (Array.isArray(sk.material) ? sk.material[0] : sk.material) : null;
+  if (!mat) { cwarn('maps: no operator material to sample - the lab is empty'); return null; }
+  var REG = (NZ.enemies && NZ.enemies.REG) || {};
+  var g = new THREE.Group(), items = [];
+  var R = M(0.085), COLW = M(0.30), ROWH = M(0.40), PER = 8;
+  var names = TILE_NAMES.filter(function (n) { return !!REG[n]; });
+  if (!names.length) { cwarn('maps: NZ.enemies.REG is empty - no atlas regions to show'); return null; }
+  for (var i = 0; i < names.length; i++) {
+    var reg = REG[names[i]];
+    var col = i % PER, row = (i / PER) | 0;
+    var x = (col - (PER - 1) / 2) * COLW, y = M(0.24) + (1 - row) * ROWH;
+    var cube = new THREE.Mesh(remapUV(chamferBox(R * 1.75, R * 1.75, R * 1.75, R * 0.16, 4), reg), mat);
+    cube.position.set(x - COLW * 0.24, y, 0);
+    cube.rotation.set(-0.16, 0.62, 0);
+    var sph = new THREE.Mesh(remapUV(new THREE.SphereGeometry(R, 30, 20), reg), mat);
+    sph.position.set(x + COLW * 0.26, y, 0);
+    cube.castShadow = sph.castShadow = true;
+    cube.receiveShadow = sph.receiveShadow = true;
+    cube.frustumCulled = sph.frustumCulled = false;
+    g.add(cube, sph);
+    items.push({ name: names[i], x: x, y: y, cube: cube, sph: sph });
+  }
+  /* a card behind so the spheres have something to occlude, and so the
+     chamfers have a value to read against */
+  var back = new THREE.Mesh(new THREE.PlaneGeometry(COLW * PER * 1.12, ROWH * 2.4),
+    stdMat(0x35373a, 0.95, 0));
+  back.position.set(0, M(0.44), -M(0.30));
+  back.receiveShadow = true;
+  g.add(back);
+  scene.add(g); g.visible = false;
+  MATLAB = { group: g, items: items, mat: mat, per: PER };
+  return MATLAB;
+}
+
+/* =============================================================== compose */
+var INFO = { cells: [], warn: CRITIC_WARN, timing: {} };
+var SIL_DARK = new THREE.MeshBasicMaterial({ color: 0x0a0b0c, fog: false });
+var SIL_LIGHT = new THREE.MeshBasicMaterial({ color: 0xb9bec4, fog: false });
+
+function tone(ctx, x, y, w, h) { ctx.fillStyle = 'rgba(8,10,12,.82)'; ctx.fillRect(x, y, w, h); }
+function drawLabel(cx, cy, c) {
+  if (!LABELS) return;
+  var pad = Math.max(6, Math.round(CELL_W * 0.012));
+  var fs = Math.max(11, Math.round(CELL_W * 0.026));
+  var bh = Math.round(fs * 2.5);
+  s2d.save();
+  s2d.translate(cx, cy);
+  tone(s2d, 0, CELL_H - bh, CELL_W, bh);
+  s2d.fillStyle = '#e8ecef';
+  s2d.font = '600 ' + fs + 'px "DejaVu Sans", Arial, sans-serif';
+  s2d.textBaseline = 'top';
+  s2d.fillText(c.title, pad, CELL_H - bh + Math.round(fs * 0.28));
+  s2d.fillStyle = '#93a0ab';
+  /* the sub-line carries measurements; shrink it until it fits rather than
+     letting the numbers run off the edge of the cell */
+  var sf = Math.round(fs * 0.72);
+  for (; sf > 7; sf--) {
+    s2d.font = '400 ' + sf + 'px "DejaVu Sans", Arial, sans-serif';
+    if (s2d.measureText(c.sub).width <= CELL_W - pad * 2) break;
+  }
+  s2d.fillText(c.sub, pad, CELL_H - bh + Math.round(fs * 1.36));
+  /* frame border */
+  s2d.strokeStyle = 'rgba(255,255,255,.10)'; s2d.lineWidth = 1;
+  s2d.strokeRect(0.5, 0.5, CELL_W - 1, CELL_H - 1);
+  s2d.restore();
+}
+function drawFail(cx, cy, title, msg) {
+  s2d.save(); s2d.translate(cx, cy);
+  s2d.fillStyle = '#2a0d0d'; s2d.fillRect(0, 0, CELL_W, CELL_H);
+  s2d.strokeStyle = '#ff4444'; s2d.lineWidth = 4; s2d.strokeRect(2, 2, CELL_W - 4, CELL_H - 4);
+  s2d.fillStyle = '#ff6b6b';
+  var fs = Math.round(CELL_W * 0.075);
+  s2d.font = '700 ' + fs + 'px "DejaVu Sans", Arial, sans-serif';
+  s2d.textAlign = 'center'; s2d.textBaseline = 'middle';
+  s2d.fillText('FAILED', CELL_W / 2, CELL_H * 0.34);
+  s2d.font = '600 ' + Math.round(fs * 0.5) + 'px "DejaVu Sans", Arial, sans-serif';
+  s2d.fillStyle = '#ffd0d0';
+  s2d.fillText(title, CELL_W / 2, CELL_H * 0.47);
+  s2d.font = '400 ' + Math.round(fs * 0.36) + 'px "DejaVu Sans", Arial, sans-serif';
+  s2d.fillStyle = '#ffb0b0';
+  var words = String(msg || '').split(/\s+/), line = '', y = CELL_H * 0.58;
+  for (var i = 0; i < words.length; i++) {
+    var probe = line ? line + ' ' + words[i] : words[i];
+    if (s2d.measureText(probe).width > CELL_W * 0.86) { s2d.fillText(line, CELL_W / 2, y); y += fs * 0.5; line = words[i]; }
+    else line = probe;
+  }
+  if (line) s2d.fillText(line, CELL_W / 2, y);
+  s2d.textAlign = 'start'; s2d.restore();
+}
+/* Every published cell has to be self-describing: a critic reading a PNG out
+   of a folder cannot see the URL that made it. */
+function drawHeader(cx, cy) {
+  if (!LABELS) return;
+  var fs = Math.max(9, Math.round(CELL_W * 0.0175));
+  var hh = Math.round(fs * 1.75);
+  s2d.save(); s2d.translate(cx, cy);
+  s2d.fillStyle = 'rgba(8,10,12,.86)'; s2d.fillRect(0, 0, CELL_W, hh);
+  s2d.fillStyle = '#b9c3cb';
+  s2d.font = '600 ' + fs + 'px "DejaVu Sans", Arial, sans-serif';
+  s2d.textBaseline = 'middle';
+  var q = (NZ.render && NZ.render.quality) || 'no-nz-render';
+  /* The environment is the first thing on the strip and it is colour-coded,
+     because a level-lit frame and a studio-lit frame of the same operator are
+     two different pictures and mixing them up wastes a review round. */
+  var envTxt = ENVMODE === 'level' ? 'ENV: LEVEL (shipping rig)' : 'ENV: STUDIO (18%->18%)';
+  var kk = (NZ.render && NZ.render.params) ? NZ.render.params : {};
+  var mid = 'tier=' + q + (Q.nzq ? '(pin)' : '(auto)') +
+    '  key ' + (kk.keyIntensity !== undefined ? kk.keyIntensity.toFixed(2) : '?') +
+    ' az' + Math.round(KEY_AZ) + '/el' + Math.round(KEY_EL) +
+    '  IBL ' + (kk.envIrradiance !== undefined ? kk.envIrradiance.toFixed(3) : '?') +
+    '  exp ' + (kk.exposure !== undefined ? kk.exposure.toFixed(2) : '?') +
+    '  ' + RW + 'x' + RH + (SS > 1 ? '/ss' + SS : '') +
+    '  taa' + TAA_N + (EV ? '  EV' + (EV > 0 ? '+' : '') + EV : '') + '  3.5u/m';
+  var right = '', rcol = '#ffb44d';
+  if (CALIBRESULT && CALIBRESULT.err !== null) {
+    var bad = Math.abs(CALIBRESULT.err) > CALIB.tol;
+    rcol = bad ? '#ff6b6b' : '#8ed3a4';
+    right = 'grey card ' + CALIBRESULT.card.srgb + '/255 (' +
+      (CALIBRESULT.err > 0 ? '+' : '') + CALIBRESULT.err + ' stop)';
+  } else if (CRITIC_WARN.length) right = CRITIC_WARN.length + ' WARN';
+  /* budget the strip: env tag, then whatever middle fits, then the verdict.
+     Three overlapping strings is how a header stops being read at all. */
+  s2d.font = '700 ' + fs + 'px "DejaVu Sans", Arial, sans-serif';
+  var pad0 = Math.round(fs * 0.6), envW = s2d.measureText(envTxt).width;
+  s2d.fillStyle = ENVMODE === 'level' ? '#f0b46a' : '#8ed3a4';
+  s2d.fillText(envTxt, pad0, hh / 2);
+  var rightW = 0;
+  if (right) {
+    s2d.font = '700 ' + fs + 'px "DejaVu Sans", Arial, sans-serif';
+    rightW = s2d.measureText(right).width + Math.round(fs * 1.2);
+    s2d.fillStyle = rcol; s2d.textAlign = 'right';
+    s2d.fillText(right, CELL_W - pad0, hh / 2);
+    s2d.textAlign = 'start';
+  }
+  var ex = pad0 + envW + Math.round(fs * 1.1);
+  var avail = CELL_W - ex - rightW - pad0;
+  s2d.fillStyle = '#b9c3cb';
+  for (var mf = fs; mf > 6; mf--) {
+    s2d.font = '600 ' + mf + 'px "DejaVu Sans", Arial, sans-serif';
+    if (s2d.measureText(mid).width <= avail) break;
+  }
+  if (avail > fs * 3) s2d.fillText(mid, ex, hh / 2);
+  s2d.restore();
+}
+/* A burned-in ruler at the SUBJECT PLANE.  "Is the rifle the right length"
+   and "is he 1.83 m tall" are two of the questions this sheet exists to
+   answer, and neither can be answered from a picture with no scale in it. */
+function drawScaleBar(cx, cy, f) {
+  if (!LABELS) return;
+  var pxPerUnit = CELL_H / (2 * f.dist * Math.tan(camera.fov * Math.PI / 360));
+  var pxPerM = pxPerUnit * SCALE;
+  var cands = [0.02, 0.05, 0.10, 0.20, 0.50, 1.00, 2.00];
+  var pick = cands[0];
+  for (var i = 0; i < cands.length; i++) if (cands[i] * pxPerM < CELL_W * 0.30) pick = cands[i];
+  var w = pick * pxPerM;
+  if (!isFinite(w) || w < 8) return;
+  var fs = Math.max(9, Math.round(CELL_W * 0.018));
+  var bh = Math.round(Math.max(11, Math.round(CELL_W * 0.026)) * 2.5);
+  var x0 = CELL_W - w - Math.round(fs * 1.1), y0 = CELL_H - bh - Math.round(fs * 1.6);
+  s2d.save(); s2d.translate(cx, cy);
+  s2d.fillStyle = 'rgba(8,10,12,.55)';
+  s2d.fillRect(x0 - 7, y0 - Math.round(fs * 1.35), w + 14, Math.round(fs * 1.35) + 12);
+  s2d.strokeStyle = '#e8ecef'; s2d.lineWidth = 2;
+  s2d.beginPath();
+  s2d.moveTo(x0, y0 - 5); s2d.lineTo(x0, y0 + 5);
+  s2d.moveTo(x0, y0); s2d.lineTo(x0 + w, y0);
+  s2d.moveTo(x0 + w, y0 - 5); s2d.lineTo(x0 + w, y0 + 5);
+  s2d.stroke();
+  s2d.fillStyle = '#e8ecef';
+  s2d.font = '600 ' + fs + 'px "DejaVu Sans", Arial, sans-serif';
+  s2d.textBaseline = 'bottom'; s2d.textAlign = 'center';
+  s2d.fillText(pick < 1 ? Math.round(pick * 1000) + ' mm' : pick + ' m', x0 + w / 2, y0 - 5);
+  s2d.textAlign = 'start';
+  s2d.restore();
+}
+function drawGuides(cx, cy) {
+  if (!GRID) return;
+  s2d.save(); s2d.translate(cx, cy);
+  s2d.strokeStyle = 'rgba(255,255,255,.12)'; s2d.lineWidth = 1;
+  for (var i = 1; i < 3; i++) {
+    s2d.beginPath(); s2d.moveTo(Math.round(CELL_W * i / 3) + .5, 0); s2d.lineTo(Math.round(CELL_W * i / 3) + .5, CELL_H); s2d.stroke();
+    s2d.beginPath(); s2d.moveTo(0, Math.round(CELL_H * i / 3) + .5); s2d.lineTo(CELL_W, Math.round(CELL_H * i / 3) + .5); s2d.stroke();
+  }
+  s2d.restore();
+}
+
+/* ================================================================ render */
+/* ------------------------------------------------------- GL -> 2D bridge --
+   gl.readPixels + putImageData, never drawImage(glCanvas).  The readback is a
+   pure CPU path: it costs one 4-byte-per-pixel copy and a row flip, and unlike
+   the compositor path it actually returns. */
+var _pix = null, _scratch = null, _s2 = null, _idat = null;
+function blitGL(cx, cy, dw, dh) {
+  dw = dw || CELL_W; dh = dh || CELL_H;
+  var n = RW * RH * 4;
+  if (!_pix || _pix.length !== n || _scratch.width !== RW || _scratch.height !== RH) {
+    _pix = new Uint8Array(n);
+    _scratch = document.createElement('canvas');
+    _scratch.width = RW; _scratch.height = RH;
+    _s2 = _scratch.getContext('2d', { willReadFrequently: true });
+    _idat = _s2.createImageData(RW, RH);
+  }
+  dbg('blit:alloc');
+  renderer.readRenderTargetPixels(capRT, 0, 0, RW, RH, _pix);
+  dbg('blit:read');
+  var dst = _idat.data, row = RW * 4;
+  for (var y = 0; y < RH; y++) {
+    var src = (RH - 1 - y) * row, d = y * row;
+    for (var i = 0; i < row; i += 4) {
+      dst[d + i] = _pix[src + i]; dst[d + i + 1] = _pix[src + i + 1];
+      dst[d + i + 2] = _pix[src + i + 2]; dst[d + i + 3] = 255;
+    }
+  }
+  dbg('blit:flip');
+  _s2.putImageData(_idat, 0, 0);
+  dbg('blit:put');
+  s2d.imageSmoothingEnabled = true;
+  s2d.imageSmoothingQuality = 'high';
+  s2d.drawImage(_scratch, 0, 0, RW, RH, cx, cy, dw, dh);
+}
+
+function renderFrames(n, tag) {
+  var per = [];
+  /* The scene is frozen for the whole burst -- the only thing that changes
+     between these frames is the TAA jitter -- so the 2560^2 shadow map is
+     identical every time. Rendering it once and reusing it is not a quality
+     cut, it is the same pixels for a fifth of the cost, and on a software
+     rasteriser the shadow pass is the single most expensive thing here. */
+  renderer.shadowMap.autoUpdate = true;
+  renderer.shadowMap.needsUpdate = true;
+  for (var i = 0; i < n; i++) {
+    var f0 = performance.now(), handled = false;
+    if (USE_R && NZ.flags.render) {
+      try { handled = (NZ.first('render', DT) === true); } catch (e) { handled = false; }
+    }
+    if (!handled) { renderer.setRenderTarget(null); renderer.render(scene, camera); }
+    renderer.shadowMap.autoUpdate = false;
+    /* SwiftShader queues asynchronously in the GPU process: without a fence
+       the per-frame number is submission cost, not render cost, and the whole
+       bill lands on the readback instead. */
+    if (FENCE) renderer.getContext().finish();
+    per.push(Math.round(performance.now() - f0));
+  }
+  if (tag) dbg(tag + ' frames ' + per.join(','));
+  return per;
+}
+
+function placeBackdrop(centre, dir, dist) {
+  var d = Math.max(M(2.2), dist * 0.85);
+  /* wide and tall enough to fill the frame from this distance, with the foot
+     of the wall on the floor */
+  var vt = Math.tan(camera.fov * Math.PI / 360);
+  var hh = (dist + d) * vt * 2.6, ww = hh * camera.aspect * 1.5;
+  backdrop.scale.set(ww, hh, 1);
+  var p = new THREE.Vector3(centre.x, 0, centre.z).addScaledVector(
+    new THREE.Vector3(dir.x, 0, dir.z).normalize(), -d);
+  backdrop.position.set(p.x, hh * 0.5 - M(0.02), p.z);
+  backdrop.lookAt(centre.x, backdrop.position.y, centre.z);
+  backdrop.updateMatrixWorld(true);
+}
+
+/* ------------------------------------------------------- calib readout --- */
+/* The numbers, on the picture, next to a swatch of what the number SHOULD
+   look like.  A calibration report that lives in a console log is a
+   calibration report nobody reads. */
+function drawCalibReadout(cx, cy, res) {
+  if (!LABELS || !res || !res.probes.length) return;
+  var fs = Math.max(9, Math.round(CELL_W * 0.0135));
+  var rowH = Math.round(fs * 1.5), padx = Math.round(fs * 0.7);
+  var rows = res.probes.filter(function (p) { return p.face !== 'cam' || /^(2%|90%)$/.test(p.name); });
+  var w = Math.round(CELL_W * 0.325), h = rowH * (rows.length + 4.4) + 10;
+  var x0 = padx, y0 = Math.round(Math.max(9, CELL_W * 0.0175) * 1.75) + padx;
+  s2d.save(); s2d.translate(cx, cy);
+  s2d.fillStyle = 'rgba(8,10,12,.90)'; s2d.fillRect(x0, y0, w, h);
+  s2d.strokeStyle = 'rgba(255,255,255,.14)'; s2d.lineWidth = 1; s2d.strokeRect(x0 + .5, y0 + .5, w - 1, h - 1);
+  var y = y0 + rowH;
+  txt(x0 + padx, y, 'CALIBRATION  (' + res.mode + ')', '#cfe6f5', fs * 1.05, '700');
+  y += rowH * 0.4;
+  txt(x0 + padx, y + rowH * 0.6, 'patch   albedo  ->  measured   want', '#7f8c98', fs * 0.86, '400');
+  y += rowH;
+  for (var i = 0; i < rows.length; i++) {
+    var p = rows[i], want = Math.round(forwardTone(p.a) * 255);
+    var dev = Math.abs(p.srgb - want);
+    y += rowH;
+    /* measured swatch, then the ideal swatch: a two-square A/B needs no maths */
+    s2d.fillStyle = 'rgb(' + p.rgb.join(',') + ')';
+    s2d.fillRect(x0 + padx, y - fs, fs, fs);
+    s2d.fillStyle = 'rgb(' + [want, want, want].join(',') + ')';
+    s2d.fillRect(x0 + padx + fs + 2, y - fs, fs, fs);
+    txt(x0 + padx + fs * 2 + 8, y - 1,
+      p.name + '  ' + p.a.toFixed(3) + '  ' + (p.oblique ? 'edge-on' : p.srgb + (p.clip ? '!' : '')) + '   ' + want +
+      (!p.oblique && (p.face === 'card' || p.face === 'key' || p.face === 'fill') ? '   x' + p.mul : ''),
+      p.oblique ? '#7f8c98' : (dev > 12 ? '#ff8b6b' : '#c9d4dd'), fs * 0.92, p.face === 'card' ? '700' : '400');
+  }
+  y += rowH * 1.35;
+  var bad = res.err === null || Math.abs(res.err) > CALIB.tol;
+  txt(x0 + padx, y,
+    res.err === null ? 'GREY CARD NOT IN FRAME' :
+      (bad ? 'FAIL  ' : 'PASS  ') + (res.err > 0 ? '+' : '') + res.err + ' stop' +
+      (res.wb !== undefined ? '   wb R-B ' + (res.wb > 0 ? '+' : '') + res.wb + '%' : ''),
+    bad ? '#ff6b6b' : '#8ed3a4', fs * 1.05, '700');
+  y += rowH;
+  txt(x0 + padx, y, 'key:fill ' + (res.ratio === null ? '--' : res.ratio + ' : 1') + '   (want ' + CALIB.ratio + ' : 1)' +
+    (res.keyOffAxis === null || res.keyOffAxis === undefined ? '' : '   key ' + res.keyOffAxis + ' off lens'),
+    (res.ratio !== null && res.ratio >= 2.0) ? '#8ed3a4' : '#ffb44d', fs * 0.95, '700');
+  s2d.restore();
+}
+
+/* world-space corners of the calibration array as it currently stands, so the
+   framing follows the props instead of a hard-coded rectangle that goes stale
+   the moment one of them moves */
+function propCorners() {
+  var b = new THREE.Box3().setFromObject(STAGE.props);
+  if (b.isEmpty()) return [];
+  return boxCorners(b).map(function (v) { return v.clone(); });
+}
+
+/* the stage on its own, with no operator in it */
+function renderCalibOnly(spec, cx, cy, why) {
+  hideAllRigs('');
+  STAGE.props.visible = true;
+  if (MATLAB) MATLAB.group.visible = false;
+  var camAz = viewAz(spec.view);
+  orientProps(camAz);
+  var pts = propCorners();
+  if (!pts.length) pts = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(M(1), M(2), M(1))];
+  var f = framePoints(pts, M(0.04), camAz, 4, { distM: 3.0, margin: 1.03 });
+  placeBackdrop(f.centre, f.dir, f.dist);
+  tightenShadow();
+  sunKey.target.position.set(f.centre.x, f.centre.y * 0.5, f.centre.z);
+  sunKey.target.updateMatrixWorld();
+  sunKey.position.copy(sunKey.target.position).add(new THREE.Vector3(
+    Math.sin(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D,
+    Math.sin(KEY_EL * Math.PI / 180) * SUN_D,
+    Math.cos(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D));
+  sunKey.updateMatrixWorld(true);
+  renderFrames(TAA_N, 'calib');
+  blitGL(cx, cy);
+  try { drawCalibReadout(cx, cy, measureCalib()); } catch (err) { cwarn('calib measure failed: ' + err.message); }
+  drawScaleBar(cx, cy, f);
+  drawLabel(cx, cy, { title: 'LIGHT CALIBRATION (stage only)', sub: 'NO OPERATOR IN FRAME - ' + why });
+  drawHeader(cx, cy);
+  INFO.cells.push({ spec: spec, poseMs: 0, drawMs: 0, tier: -1, camAz: camAz, dist: +f.dist.toFixed(2) });
+}
+
+/* ==================================================== custom cell bodies == */
+function txt(x, y, s, col, size, weight, align) {
+  s2d.fillStyle = col || '#e8ecef';
+  s2d.font = (weight || '600') + ' ' + Math.round(size || 13) + 'px "DejaVu Sans", Arial, sans-serif';
+  s2d.textAlign = align || 'start'; s2d.textBaseline = 'alphabetic';
+  s2d.fillText(s, x, y);
+  s2d.textAlign = 'start';
+}
+function hideAllRigs(except) {
+  for (var k in ENT) if (ENT[k].rig && ENT[k].rig.root)
+    ENT[k].rig.root.visible = (except === '*' || k === except);
+}
+function allProbeOff() { STAGE.props.visible = false; if (MATLAB) MATLAB.group.visible = false;
+  if (SCALEREF) { SCALEREF.mannequin.visible = false; SCALEREF.crate.visible = false; } }
+
+/* ---- cell=maps : the atlas, flat, plus a cube and a sphere per region ---- */
+function cellMaps(spec, cx, cy) {
+  var e = getEntity(spec.kind);
+  if (!e || e.__fail) { drawFail(cx, cy, 'MAPS', e && e.__fail || 'no entity'); return null; }
+  drivePose(e, 'idle', 0);
+  var lab = buildMatLab(e);
+  var atlas = (NZ.enemies && NZ.enemies._atlas) ? NZ.enemies._atlas() : null;
+  if (!atlas) cwarn('maps: NZ.enemies._atlas() returned null - the baked maps cannot be shown');
+
+  /* --- top: the four channels, flat, at 1:1 gamma (no tone curve) --- */
+  var pad = Math.round(CELL_W * 0.010);
+  /* leave the header strip alone: drawHeader() paints last and was eating the
+     channel titles */
+  var hdrH = Math.round(Math.max(9, Math.round(CELL_W * 0.0175)) * 1.75);
+  var mapH = hdrH + Math.round(CELL_H * 0.44);
+  var sw = Math.floor((CELL_W - pad * 5) / 4), sh = Math.min(sw, mapH - hdrH - 30);
+  s2d.save(); s2d.translate(cx, cy);
+  s2d.fillStyle = '#15181b'; s2d.fillRect(0, 0, CELL_W, mapH + 10);
+  var chans = [
+    { key: 'map',       title: 'ALBEDO  (sRGB)',      ch: null },
+    { key: 'normalMap', title: 'NORMAL  (tangent)',   ch: null },
+    { key: 'orm',       title: 'ROUGHNESS  (ORM.g)',  ch: 1 },
+    { key: 'orm',       title: 'AO  (ORM.r)',         ch: 0 }
+  ];
+  var tmp = document.createElement('canvas'), t2 = null;
+  for (var i = 0; i < 4; i++) {
+    var x = pad + i * (sw + pad), y = hdrH + 22;
+    var img = atlas && atlas[chans[i].key];
+    s2d.strokeStyle = 'rgba(255,255,255,.16)'; s2d.lineWidth = 1;
+    if (img) {
+      if (chans[i].ch === null) {
+        s2d.imageSmoothingEnabled = true;
+        s2d.drawImage(img, 0, 0, img.width, img.height, x, y, sw, sh);
+      } else {
+        /* split one channel out of the packed ORM so roughness and AO can be
+           looked at as the greyscales they are, not guessed at from a
+           red/green mush */
+        if (tmp.width !== img.width) { tmp.width = img.width; tmp.height = img.height; t2 = tmp.getContext('2d', { willReadFrequently: true }); }
+        t2.drawImage(img, 0, 0);
+        var id = t2.getImageData(0, 0, img.width, img.height), d = id.data, c = chans[i].ch;
+        for (var p = 0; p < d.length; p += 4) { var v = d[p + c]; d[p] = d[p + 1] = d[p + 2] = v; d[p + 3] = 255; }
+        t2.putImageData(id, 0, 0);
+        s2d.drawImage(tmp, 0, 0, img.width, img.height, x, y, sw, sh);
+      }
+    } else {
+      s2d.fillStyle = '#2a0d0d'; s2d.fillRect(x, y, sw, sh);
+      txt(x + sw / 2, y + sh / 2, 'NOT BAKED', '#ff6b6b', 15, '700', 'center');
+    }
+    s2d.strokeRect(x + .5, y + .5, sw - 1, sh - 1);
+    txt(x, y - 8, chans[i].title, '#c8d2da', Math.max(11, CELL_W * 0.011), '700');
+    /* 4x4 tile grid with names: an atlas you cannot navigate is an atlas you
+       cannot fix */
+    s2d.strokeStyle = 'rgba(120,200,255,.32)';
+    for (var t = 1; t < 4; t++) {
+      s2d.beginPath(); s2d.moveTo(x + sw * t / 4, y); s2d.lineTo(x + sw * t / 4, y + sh); s2d.stroke();
+      s2d.beginPath(); s2d.moveTo(x, y + sh * t / 4); s2d.lineTo(x + sw, y + sh * t / 4); s2d.stroke();
+    }
+    if (i === 0) {
+      var TN = ['skin', 'cloth', 'nylon', 'leather', 'plastic', 'rubber', 'steel', 'painted',
+                'gunmetal', 'camo', 'scrim', 'knit', 'trim', 'lens', 'web', 'wound'];
+      for (t = 0; t < 16; t++)
+        txt(x + (t % 4) * sw / 4 + 3, y + ((t / 4) | 0) * sh / 4 + 12, TN[t], 'rgba(190,235,255,.9)', Math.max(8, CELL_W * 0.0072), '700');
+    }
+  }
+  s2d.restore();
+
+  /* --- bottom: the same materials on real geometry --- */
+  var gy = mapH + 14, gh = CELL_H - gy - Math.round(CELL_W * 0.026 * 2.5);
+  var res = null;
+  if (lab) {
+    hideAllRigs(''); allProbeOff();
+    lab.group.visible = true;
+    setRenderSize(Math.min(1400, CELL_W), Math.max(120, gh));
+    var pts = [];
+    for (var q = 0; q < lab.items.length; q++) {
+      pts.push(new THREE.Vector3(lab.items[q].x, lab.items[q].y, 0));
+    }
+    pts.push(new THREE.Vector3(-M(1.30), M(0.04), 0), new THREE.Vector3(M(1.30), M(0.72), 0));
+    /* straight on: an oblique row of spheres compares foreshortening, not
+       material.  The key is still 52 degrees off this axis (KEY_AZ is fixed
+       for the whole run and derived from exactly this camera). */
+    var f = framePoints(pts, M(0.10), viewAz(spec.view), 4, { distM: 4.2, margin: 1.02 });
+    placeBackdrop(f.centre, f.dir, f.dist * 3);
+    backdrop.visible = false;
+    tightenShadow();
+    sunKey.target.position.copy(f.centre); sunKey.target.updateMatrixWorld();
+    sunKey.position.copy(f.centre).add(new THREE.Vector3(
+      Math.sin(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D,
+      Math.sin(KEY_EL * Math.PI / 180) * SUN_D,
+      Math.cos(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D));
+    sunKey.updateMatrixWorld(true);
+    renderFrames(TAA_N, 'maps');
+    blitGL(cx, cy + gy, CELL_W, gh);
+    /* label each pair where it actually landed on screen */
+    s2d.save(); s2d.translate(cx, cy + gy);
+    for (q = 0; q < lab.items.length; q++) {
+      var it = lab.items[q];
+      var pv = new THREE.Vector3(it.x, it.y - M(0.115), 0).project(camera);
+      var px2 = (pv.x * 0.5 + 0.5) * CELL_W, py2 = (1 - (pv.y * 0.5 + 0.5)) * gh;
+      if (px2 < 0 || px2 > CELL_W || py2 < 0 || py2 > gh) continue;
+      s2d.fillStyle = 'rgba(8,10,12,.72)';
+      var fw = Math.max(46, CELL_W * 0.052);
+      s2d.fillRect(px2 - fw / 2, py2 + 2, fw, 15);
+      txt(px2, py2 + 13, it.name, '#dfe7ee', Math.max(9, CELL_W * 0.0092), '700', 'center');
+    }
+    s2d.restore();
+    lab.group.visible = false;
+    backdrop.visible = true;
+    setRenderSize(BASE_W, BASE_H);
+    res = { n: lab.items.length };
+  } else {
+    drawFail(cx, cy + gy, 'MATERIAL LAB', 'no operator material / no atlas regions');
+  }
+  return { sub: 'atlas 1024x1024, 16 tiles  |  ' + (res ? res.n : 0) + ' regions on chamfered cube + sphere' +
+    '  |  maps drawn flat, no tone curve' };
+}
+
+/* ---- cell=roster : four operators, one light, one lens, one frame -------- */
+function cellRoster(spec, cx, cy) {
+  var pts = [], ok = [], i, e;
+  var camAz = viewAz(spec.view);
+  var B = camBasis(camAz, 5);
+  allProbeOff();
+  for (i = 0; i < KINDS.length; i++) {
+    e = getEntity(KINDS[i]);
+    if (!e || e.__fail) { cwarn('roster: ' + KINDS[i] + ' unavailable (' + (e && e.__fail) + ')'); continue; }
+    drivePose(e, spec.pose === 'full' ? 'aim' : spec.pose, camAz);
+    if (!charOf(e)) { cwarn('roster: ' + KINDS[i] + ' has no SkinnedMesh at this tier'); continue; }
+    ok.push(e);
+  }
+  if (!ok.length) { drawFail(cx, cy, 'ROSTER', 'no operator could be posed'); return null; }
+  /* laid out along the CAMERA RIGHT axis, not world X: every operator is then
+     the same distance from the lens and the comparison is honest */
+  var gap = M(1.30), x0 = -(ok.length - 1) / 2;
+  for (i = 0; i < ok.length; i++) {
+    var off = (x0 + i) * gap;
+    ok[i].rig.root.position.addScaledVector(B.right, off);
+    ok[i].rig.root.updateMatrixWorld(true);
+    ok[i].__rosterOff = off;
+    var sk = charOf(ok[i]); if (sk) { sk.castShadow = sk.receiveShadow = true; sk.frustumCulled = false; }
+    var pr = pointsOfRig(ok[i]);
+    if (pr) pts = pts.concat(pr);
+  }
+  hideAllRigs('*');
+  var cd = CELLS.roster;
+  var f = framePoints(pts, M(0.16), camAz, cd.elev, { distM: cd.distM, margin: cd.margin });
+  placeBackdrop(f.centre, f.dir, f.dist);
+  tightenShadow();
+  var scam = sunKey.shadow.camera, ext = M(3.6) + gap * ok.length * 0.5;
+  scam.left = -ext; scam.right = ext; scam.top = ext; scam.bottom = -ext; scam.updateProjectionMatrix();
+  sunKey.target.position.set(f.centre.x, f.centre.y * 0.5, f.centre.z);
+  sunKey.target.updateMatrixWorld();
+  sunKey.position.copy(sunKey.target.position).add(new THREE.Vector3(
+    Math.sin(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D,
+    Math.sin(KEY_EL * Math.PI / 180) * SUN_D,
+    Math.cos(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D));
+  sunKey.updateMatrixWorld(true);
+  renderFrames(TAA_N, 'roster');
+  blitGL(cx, cy);
+  /* burn each operator's name under its own feet */
+  s2d.save(); s2d.translate(cx, cy);
+  for (i = 0; i < ok.length; i++) {
+    var base = new THREE.Vector3().addScaledVector(B.right, ok[i].__rosterOff).project(camera);
+    var bx = (base.x * 0.5 + 0.5) * CELL_W, by = (1 - (base.y * 0.5 + 0.5)) * CELL_H;
+    var fs2 = Math.max(12, CELL_W * 0.0165);
+    s2d.fillStyle = 'rgba(8,10,12,.74)';
+    s2d.fillRect(bx - CELL_W * 0.085, by + 4, CELL_W * 0.17, fs2 * 2.5);
+    txt(bx, by + 4 + fs2 * 1.05, DISPLAY[ok[i].kind] || ok[i].kind, '#e8ecef', fs2, '700', 'center');
+    txt(bx, by + 4 + fs2 * 2.15, ok[i].kind + '  ' + (ok[i].cfg.h / SCALE).toFixed(2) + ' m', '#93a0ab', fs2 * 0.78, '400', 'center');
+    /* put them back where they were so the next cell is not shifted */
+    ok[i].rig.root.position.addScaledVector(B.right, -ok[i].__rosterOff);
+  }
+  s2d.restore();
+  /* no scale bar: it lands on top of the fourth operator's name plate, and the
+     1 m floor grid already carries the scale */
+  return { sub: ok.length + ' operators  |  identical key/lens/standoff  |  gap ' +
+    (gap / SCALE).toFixed(2) + ' m  |  floor grid 1 m  |  pose ' +
+    (spec.pose === 'full' ? 'aim' : spec.pose) };
+}
+
+/* ---- cell=anim : N phases of one continuous cycle, in a row -------------- */
+function cellAnim(spec, cx, cy) {
+  var e = getEntity(spec.kind);
+  if (!e || e.__fail) { drawFail(cx, cy, 'ANIM', e && e.__fail || 'no entity'); return null; }
+  var pose = (spec.pose === 'full' || spec.pose === 'aim') ? 'walk' : spec.pose;
+  var N = FRAMES_N;
+  var camAz = viewAz(spec.view);
+  var cd = CELLS.anim;
+  var labH = Math.round(CELL_W * 0.026 * 2.5);
+  var stripH = CELL_H - labH - Math.round(Math.max(9, CELL_W * 0.0175) * 1.75);
+  var telH = Math.round(stripH * 0.20);
+  var frameH = stripH - telH, frameW = Math.floor(CELL_W / N);
+  var y0 = Math.round(Math.max(9, CELL_W * 0.0175) * 1.75);
+  allProbeOff(); hideAllRigs(spec.kind);
+
+  /* settle the cycle once, then walk it forward -- one continuous stride */
+  drivePose(e, pose, camAz, { phase: 0.0 });
+  var sk = charOf(e);
+  if (!sk) { drawFail(cx, cy, 'ANIM', 'no SkinnedMesh at this LOD tier'); return null; }
+  sk.castShadow = sk.receiveShadow = true; sk.frustumCulled = false;
+
+  /* frame ONCE off the settled pose so every strip frame shares a camera:
+     a per-frame refit would rescale the operator and hide exactly the vertical
+     travel the strip exists to show */
+  setRenderSize(frameW, frameH);
+  var f = framePoints(pointsOfRig(e), M(0.16), camAz, cd.elev, { distM: cd.distM, margin: cd.margin });
+  placeBackdrop(f.centre, f.dir, f.dist);
+  tightenShadow();
+  sunKey.target.position.set(f.centre.x, f.centre.y * 0.5, f.centre.z);
+  sunKey.target.updateMatrixWorld();
+  sunKey.position.copy(sunKey.target.position).add(new THREE.Vector3(
+    Math.sin(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D,
+    Math.sin(KEY_EL * Math.PI / 180) * SUN_D,
+    Math.cos(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D));
+  sunKey.updateMatrixWorld(true);
+  var camSave = { p: camera.position.clone(), q: camera.quaternion.clone(), fov: camera.fov };
+
+  var tel = [], gY = null;
+  for (var i = 0; i < N; i++) {
+    if (i > 0) drivePose(e, pose, camAz, { phase: i / N, noReset: true, frames: 1 });
+    camera.position.copy(camSave.p); camera.quaternion.copy(camSave.q);
+    camera.fov = camSave.fov; camera.aspect = RW / RH; camera.updateProjectionMatrix();
+    renderFrames(TAA_N, 'anim' + i);
+    blitGL(cx + i * frameW, cy + y0, frameW, frameH);
+    /* telemetry, in the WORLD frame: drivePose re-centres the root by e.x, so
+       a foot's true world position is its drawn position plus the travel. A
+       planted foot must not move in this column. */
+    var fl = boneWorld(e, 'footL'), fr = boneWorld(e, 'footR');
+    var rec = { i: i, phase: i / N, x: e.x,
+      lY: fl ? fl.y : null, rY: fr ? fr.y : null,
+      lX: fl ? fl.z + e.z : null, rX: fr ? fr.z + e.z : null };
+    tel.push(rec);
+    if (gY === null) {
+      var g0 = new THREE.Vector3(f.centre.x, 0, f.centre.z).project(camera);
+      gY = (1 - (g0.y * 0.5 + 0.5)) * frameH;
+    }
+  }
+  setRenderSize(BASE_W, BASE_H);
+
+  /* per-frame overlay: ground line, phase, and the two numbers that decide
+     whether the legs dangle */
+  s2d.save(); s2d.translate(cx, cy);
+  for (i = 0; i < N; i++) {
+    var fx = i * frameW;
+    s2d.strokeStyle = 'rgba(255,255,255,.10)'; s2d.lineWidth = 1;
+    s2d.beginPath(); s2d.moveTo(fx + .5, y0); s2d.lineTo(fx + .5, y0 + frameH); s2d.stroke();
+    if (gY !== null && gY > 0 && gY < frameH) {
+      s2d.strokeStyle = 'rgba(110,220,255,.55)'; s2d.setLineDash([4, 4]);
+      s2d.beginPath(); s2d.moveTo(fx, y0 + gY); s2d.lineTo(fx + frameW, y0 + gY); s2d.stroke();
+      s2d.setLineDash([]);
+    }
+    txt(fx + 5, y0 + 15, 'p' + Math.round(tel[i].phase * 100) + '%', '#cfe6f5', Math.max(10, frameW * 0.075), '700');
+  }
+  /* telemetry band */
+  var ty = y0 + frameH;
+  s2d.fillStyle = 'rgba(10,13,16,.94)'; s2d.fillRect(0, ty, CELL_W, telH);
+  s2d.strokeStyle = 'rgba(255,255,255,.10)';
+  s2d.beginPath(); s2d.moveTo(0, ty + .5); s2d.lineTo(CELL_W, ty + .5); s2d.stroke();
+  var fs3 = Math.max(8, Math.min(13, frameW * 0.072));
+  var worstSlip = 0, worstFloat = 0;
+  for (i = 0; i < N; i++) {
+    var t0 = tel[i], tp = tel[(i - 1 + N) % N];
+    var dL = (i === 0 || t0.lX === null || tp.lX === null) ? null : Math.abs(t0.lX - tp.lX) / SCALE * 1000;
+    var dR = (i === 0 || t0.rX === null || tp.rX === null) ? null : Math.abs(t0.rX - tp.rX) / SCALE * 1000;
+    var hL = t0.lY === null ? null : t0.lY / SCALE * 1000, hR = t0.rY === null ? null : t0.rY / SCALE * 1000;
+    /* whichever foot moved less this step is the one in stance: that is the
+       one whose slip is a defect */
+    var stanceL = (dL !== null && dR !== null) ? (dL < dR) : true;
+    var slip = stanceL ? dL : dR;
+    if (slip !== null && slip > worstSlip) worstSlip = slip;
+    var lo = Math.min(hL === null ? 1e9 : hL, hR === null ? 1e9 : hR);
+    if (lo < 1e9) worstFloat = Math.max(worstFloat, Math.abs(lo));
+    var xx = i * frameW + 5;
+    txt(xx, ty + fs3 * 1.3, 'ankle L' + (hL === null ? '--' : Math.round(hL)) + ' R' + (hR === null ? '--' : Math.round(hR)),
+      '#93a0ab', fs3, '400');
+    txt(xx, ty + fs3 * 2.5, 'stance ' + (stanceL ? 'L' : 'R') + ' slip ' + (slip === null ? '--' : Math.round(slip)) + 'mm',
+      slip !== null && slip > 12 ? '#ff8b6b' : '#8ed3a4', fs3, '700');
+  }
+  s2d.restore();
+  /* no scale bar: it sits on top of the last two telemetry columns */
+  return { tel: tel,
+    sub: pose + ' cycle, ' + N + ' phases  |  worst stance-foot slip ' + Math.round(worstSlip) +
+      ' mm per 1/' + N + ' cycle  |  lowest ankle ' + Math.round(worstFloat) +
+      ' mm  |  dashed line = world y=0' };
+}
+
+/* ---- cell=scale : operator vs a 1.83 m mannequin and a 1.20 m crate ------ */
+function cellScale(spec, cx, cy) {
+  var e = getEntity(spec.kind);
+  if (!e || e.__fail) { drawFail(cx, cy, 'SCALE', e && e.__fail || 'no entity'); return null; }
+  var camAz = viewAz(spec.view);
+  drivePose(e, spec.pose === 'full' ? 'idle' : spec.pose, camAz);
+  var sk = charOf(e);
+  if (!sk) { drawFail(cx, cy, 'SCALE', 'no SkinnedMesh at this LOD tier'); return null; }
+  sk.castShadow = sk.receiveShadow = true; sk.frustumCulled = false;
+  hideAllRigs(spec.kind); allProbeOff();
+  var S = buildScaleRef();
+  var cd = CELLS.scale, B = camBasis(camAz, cd.elev);
+  var mOff = M(1.15), cOff = M(-1.30);
+  S.mannequin.position.set(0, 0, 0).addScaledVector(B.right, mOff);
+  S.crate.position.set(0, 0, 0).addScaledVector(B.right, cOff);
+  S.mannequin.rotation.y = camAz * Math.PI / 180;
+  /* turned AWAY from the frame centre so the near vertical edge and both
+     faces read: a cube seen dead-on is indistinguishable from a flat card */
+  S.crate.rotation.y = camAz * Math.PI / 180 - 0.55;
+  S.mannequin.visible = S.crate.visible = true;
+  S.mannequin.updateMatrixWorld(true); S.crate.updateMatrixWorld(true);
+  var pts = pointsOfRig(e) || [];
+  pts = pts.concat([
+    new THREE.Vector3().addScaledVector(B.right, mOff).setY(0),
+    new THREE.Vector3().addScaledVector(B.right, mOff).setY(M(1.83)),
+    new THREE.Vector3().addScaledVector(B.right, cOff).setY(0),
+    new THREE.Vector3().addScaledVector(B.right, cOff).setY(M(1.20))]);
+  var f = framePoints(pts, M(0.18), camAz, cd.elev, { distM: cd.distM, margin: cd.margin });
+  placeBackdrop(f.centre, f.dir, f.dist);
+  tightenShadow();
+  var scam = sunKey.shadow.camera, ext = M(4.6);
+  scam.left = -ext; scam.right = ext; scam.top = ext; scam.bottom = -ext; scam.updateProjectionMatrix();
+  sunKey.target.position.set(f.centre.x, f.centre.y * 0.5, f.centre.z);
+  sunKey.target.updateMatrixWorld();
+  sunKey.position.copy(sunKey.target.position).add(new THREE.Vector3(
+    Math.sin(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D,
+    Math.sin(KEY_EL * Math.PI / 180) * SUN_D,
+    Math.cos(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D));
+  sunKey.updateMatrixWorld(true);
+  renderFrames(TAA_N, 'scale');
+  blitGL(cx, cy);
+
+  /* Horizontal rules at every 0.5 m, projected from the world.
+     They are drawn at the MANNEQUIN's depth, not at the framing centre's: the
+     framing centre sits at the mid-depth of the whole cloud (the crate is
+     1.2 m deep and turned 16 degrees), and a rule drawn a few units nearer the
+     lens than the thing it is measuring reads about 40 mm high at this
+     standoff -- enough to make a correct 1.83 m mannequin look short, which is
+     precisely the error this cell exists to catch. */
+  s2d.save(); s2d.translate(cx, cy);
+  var refP = new THREE.Vector3().addScaledVector(B.right, mOff);
+  var atY = function (metres) {
+    var p = new THREE.Vector3(refP.x, M(metres), refP.z).project(camera);
+    return (1 - (p.y * 0.5 + 0.5)) * CELL_H;
+  };
+  /* The operator's REAL stature: the top of the SKINNED SILHOUETTE, measured
+     by running the skinning on the actual vertices.  Not ECFG (that is the
+     number someone typed), not the head bone (that is inside the skull), not
+     headWorld() (that is the headshot capsule, which stops well below the
+     helmet).  This is the number a player's eye reads. */
+  var mh = measuredExtent(e);
+  var crownM = mh ? (mh.top - mh.low) / SCALE : null;
+  var crownMode = mh ? mh.mode : '?';
+  for (var mtr = 0.5; mtr <= 2.0001; mtr += 0.5) {
+    var yy = atY(mtr); if (!(yy > 12 && yy < CELL_H - 12)) continue;
+    s2d.strokeStyle = mtr === 1.83 ? 'rgba(255,200,90,.55)' : 'rgba(120,200,255,.30)';
+    s2d.setLineDash([5, 5]); s2d.lineWidth = 1;
+    s2d.beginPath(); s2d.moveTo(0, yy + .5); s2d.lineTo(CELL_W, yy + .5); s2d.stroke();
+    s2d.setLineDash([]);
+    txt(4, yy - 4, mtr.toFixed(1) + ' m', 'rgba(190,230,255,.9)', Math.max(10, CELL_W * 0.014), '700');
+  }
+  var y183 = atY(1.83);
+  s2d.strokeStyle = 'rgba(255,200,90,.75)'; s2d.lineWidth = 2;
+  s2d.beginPath(); s2d.moveTo(0, y183 + .5); s2d.lineTo(CELL_W, y183 + .5); s2d.stroke();
+  txt(CELL_W - 6, y183 - 5, '1.83 m  (mannequin crown)', '#ffcf6a', Math.max(10, CELL_W * 0.014), '700', 'right');
+  if (crownM !== null) {
+    var yc = atY(crownM);
+    s2d.strokeStyle = 'rgba(120,255,160,.85)'; s2d.lineWidth = 2;
+    s2d.setLineDash([9, 5]);
+    s2d.beginPath(); s2d.moveTo(0, yc + .5); s2d.lineTo(CELL_W * 0.62, yc + .5); s2d.stroke();
+    s2d.setLineDash([]);
+    txt(6, yc + (Math.abs(yc - y183) < 16 ? 16 : -5),
+      'operator ' + crownM.toFixed(2) + ' m (' + crownMode + ')', '#7cffa0', Math.max(10, CELL_W * 0.014), '700');
+  }
+  s2d.restore();
+  S.mannequin.visible = S.crate.visible = false;
+  var dev = crownM === null ? null : ((crownM - e.cfg.h / SCALE) / (e.cfg.h / SCALE) * 100);
+  return { f: f, sub: 'ECFG nominal ' + (e.cfg.h / SCALE).toFixed(2) + ' m (h=' + e.cfg.h.toFixed(1) + 'u)  |  measured ' +
+    (crownM === null ? '?' : crownM.toFixed(2) + ' m (' + (dev >= 0 ? '+' : '') + dev.toFixed(1) + '%, ' + crownMode + ')') +
+    '  |  mannequin 1.83 m  |  crate 1.20 m  |  floor grid 1 m' };
+}
+
+function renderCell(spec, slot) {
+  var cx = (slot % COLS) * CELL_W, cy = Math.floor(slot / COLS) * CELL_H;
+  var cd = CELLS[spec.cell] || CELLS.full;
+
+  /* ---- composite cells own their whole frame ---- */
+  if (cd.custom) {
+    var head0 = (DISPLAY[spec.kind] || spec.kind.toUpperCase());
+    var title0 = { maps: 'MATERIAL / TEXTURE INSPECTION', roster: 'ROSTER - all four operators',
+                   anim: head0 + ' - animation strip', scale: head0 + ' - scale reference' }[cd.custom];
+    var t0c = performance.now(), out = null;
+    try {
+      out = cd.custom === 'maps' ? cellMaps(spec, cx, cy)
+          : cd.custom === 'roster' ? cellRoster(spec, cx, cy)
+          : cd.custom === 'anim' ? cellAnim(spec, cx, cy)
+          : cellScale(spec, cx, cy);
+    } catch (err) {
+      setRenderSize(BASE_W, BASE_H);
+      drawFail(cx, cy, title0, 'cell threw: ' + (err && err.message));
+      cwarn(cd.custom + ' threw: ' + (err && err.stack || err));
+    }
+    if (out) {
+      drawGuides(cx, cy);
+      if (out.f) drawScaleBar(cx, cy, out.f);
+      drawLabel(cx, cy, { title: title0, sub: out.sub || '' });
+    }
+    drawHeader(cx, cy);
+    INFO.cells.push({ spec: spec, poseMs: 0, drawMs: Math.round(performance.now() - t0c), tier: 0, camAz: 0, dist: 0 });
+    if (out && out.tel) INFO.anim = out.tel;
+    return;
+  }
+
+  var e = getEntity(spec.kind);
+  var head = (DISPLAY[spec.kind] || spec.kind.toUpperCase());
+  var title = head + ' - ' + spec.pose + ' - ' + spec.cell;
+  /* The calibration cell measures the LIGHT.  It must keep working when the
+     rig module is broken -- that is exactly when someone needs to know whether
+     the stage is still trustworthy -- so it falls back to the bare stage and
+     says so on the picture rather than throwing the whole cell away. */
+  if (cd.props && (!e || e.__fail)) { renderCalibOnly(spec, cx, cy, e && e.__fail || 'no entity'); return; }
+  if (!e) { drawFail(cx, cy, title, 'ECFG has no kind "' + spec.kind + '"'); return; }
+  if (e.__fail) { drawFail(cx, cy, title, e.__fail); return; }
+
+  var az = viewAz(spec.view);
+  var t0 = performance.now();
+  dbg('pose:begin ' + spec.kind + '/' + spec.pose);
+  drivePose(e, spec.pose, az);
+  var tPose = performance.now() - t0;
+  dbg('pose:end ' + Math.round(tPose) + 'ms');
+  if (e.__fail) { drawFail(cx, cy, title, e.__fail); return; }
+
+  var sk = charOf(e);
+  if (!sk) {
+    drawFail(cx, cy, title, 'no SkinnedMesh under the rig root - the actor is on the far/instanced LOD tier ' +
+      '(tier=' + (e._nz ? e._nz.tier : '?') + '). Nothing to critique at this range.');
+    return;
+  }
+  sk.castShadow = true; sk.receiveShadow = true;
+  sk.frustumCulled = false;
+
+  /* visibility: exactly one operator per cell */
+  for (var k in ENT) if (ENT[k].rig && ENT[k].rig.root) ENT[k].rig.root.visible = (k === spec.kind);
+  STAGE.props.visible = !!cd.props;
+
+  /* what exactly are we pointing at */
+  var pts = null, pad = M(cd.pad || 0.10), wm = null;
+  if (cd.weapon) {
+    wm = weaponMesh(e);
+    if (wm) {
+      if (!wm.parent) scene.add(wm);
+      wm.visible = true;
+      wm.userData.rebuild();
+      pts = pointsOfMesh(wm, 5);
+      pad = M(0.02);
+      e.rig.root.visible = false;         /* the gun really is alone */
+    } else {
+      pts = pointsOfBones(e, ['handL', 'handR', 'fingL', 'fingR']);
+      pad = M(0.55);
+      if (!pts) pts = pointsOfRig(e);
+    }
+  } else if (cd.bones) {
+    pts = pointsOfBones(e, cd.bones);
+    if (!pts) { pts = pointsOfRig(e); pad = M(0.10); cwarn(spec.cell + ': no named bones resolved, fell back to whole-rig framing'); }
+  } else {
+    pts = pointsOfRig(e);
+    pad = M(0.10);
+    if (cd.props) {
+      /* Frame the ARRAY, not the operator.  A patch that lands 20 px wide
+         cannot be sampled: the readback window, the chromatic aberration and
+         the sharpen kernel all reach across into the next patch, which is how
+         a 1% black chip came back reading 9x its own albedo.  The operator
+         stands behind the array and is deliberately the smaller subject here --
+         this cell exists to measure the light, not to look at him. */
+      orientProps(az);
+      pts = propCorners();
+      pad = M(0.04);
+    }
+  }
+  if (!pts) { drawFail(cx, cy, title, 'nothing to frame: neither bones nor rig geometry could be located'); return; }
+  if (WEP_CACHE[spec.kind] && !cd.weapon && WEP_CACHE[spec.kind].parent) WEP_CACHE[spec.kind].visible = false;
+
+  var camAz;
+  if (cd.azMode === 'weapon')    camAz = weaponAzimuth(e, az) + (cd.azRel || 0);
+  else if (cd.azMode === 'body') camAz = e.face * 180 / Math.PI + (cd.azRel || 0);
+  else                           camAz = az + (cd.azRel || 0);
+  var f = framePoints(pts, pad, camAz, spec.view === 'top' ? 74 : (cd.elev || 0),
+    { distM: cd.distM, margin: cd.margin, fov: cd.fov });
+  placeBackdrop(f.centre, f.dir, f.dist);
+  tightenShadow();
+  /* keep the shadow frustum over the SUBJECT, not the world origin */
+  sunKey.target.position.set(f.centre.x, f.centre.y * 0.5, f.centre.z);
+  sunKey.target.updateMatrixWorld();
+  sunKey.position.copy(sunKey.target.position).add(new THREE.Vector3(
+    Math.sin(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D,
+    Math.sin(KEY_EL * Math.PI / 180) * SUN_D,
+    Math.cos(KEY_AZ * Math.PI / 180) * Math.cos(KEY_EL * Math.PI / 180) * SUN_D));
+  sunKey.updateMatrixWorld(true);
+
+  /* Silhouette read (CS2-BRIEF: "an object reads as real from its outline
+     before any texture loads").  scene.overrideMaterial would flatten the
+     BACKDROP too and hand back a black rectangle, so only the character is
+     swapped and the wall is lit flat behind it. */
+  var silSave = null;
+  if (cd.silhouette) {
+    silSave = { mat: sk.material, bd: backdrop.material, gd: ground.material };
+    sk.material = SIL_DARK;
+    backdrop.material = SIL_LIGHT;
+    ground.material = SIL_LIGHT;      /* flat, not hidden: a hidden floor
+                                         leaves the void below the horizon */
+    if (wm) wm.material = SIL_DARK;
+  }
+  var t1 = performance.now();
+  dbg('draw:begin ' + TAA_N + ' frames @' + RW + 'x' + RH);
+  renderFrames(TAA_N, 'draw');
+  var tDraw = performance.now() - t1;
+  dbg('draw:end ' + Math.round(tDraw) + 'ms');
+  if (silSave) {
+    sk.material = silSave.mat; backdrop.material = silSave.bd; ground.material = silSave.gd;
+    if (wm) wm.material = silSave.mat;
+  }
+
+  /* blit + downsample */
+  blitGL(cx, cy);
+  dbg('blit:end');
+  /* the calibration cell is the only one that reads its own pixels back and
+     grades itself; do it before the overlays so nothing painted on top of the
+     frame can be sampled by mistake */
+  if (cd.props) { try { drawCalibReadout(cx, cy, measureCalib()); } catch (err) { cwarn('calib measure failed: ' + err.message); } }
+  drawGuides(cx, cy);
+
+  var st = e._nz || {};
+  var sub = KIT[spec.kind] + '  |  view ' + spec.view + ' az' + Math.round(camAz) + '°' +
+    '  fov' + Math.round(camera.fov) + '  q=' + ((NZ.render && NZ.render.quality) || 'n/a') +
+    '  lod' + (st.tier === undefined ? '?' : st.tier) +
+    '  h=' + (e.cfg.h).toFixed(1) + 'u/' + (e.cfg.h / SCALE).toFixed(2) + 'm';
+  if (wm) {
+    var oal = longestChord(pts), smm = WEAPON_SPEC_MM[spec.kind] || 0;
+    var mm = oal / SCALE * 1000, dev = smm ? ((mm - smm) / smm * 100) : 0;
+    sub += '  |  OAL ' + oal.toFixed(2) + 'u = ' + Math.round(mm) + 'mm' +
+      (smm ? ' (spec ' + smm + ', ' + (dev >= 0 ? '+' : '') + dev.toFixed(1) + '%)' : '') +
+      '  ' + wm.userData.tris + ' tris';
+    INFO.oal = { kind: spec.kind, units: +oal.toFixed(3), mm: Math.round(mm), specMM: smm, devPct: +dev.toFixed(1) };
+  }
+  dbg('label:begin');
+  drawScaleBar(cx, cy, f);
+  drawLabel(cx, cy, { title: title, sub: sub });
+  drawHeader(cx, cy);
+  dbg('label:end');
+  INFO.cells.push({ spec: spec, poseMs: Math.round(tPose), drawMs: Math.round(tDraw), tier: st.tier, camAz: camAz, dist: +f.dist.toFixed(2) });
+}
+
+/* =============================================================== the run */
+/* Cells are published ONE AT A TIME.  The runner has a hard 40 s wall and a
+   sheet can easily want more than that, so every finished cell is exposed as
+   its own PNG and announced through document.title the moment it is done.
+   A caller that runs out of budget half way through still keeps everything
+   that completed, and re-running skips it. */
+var CELLPNG = [];
+var cellCanvas = null, cell2d = null;
+function publishCell(i) {
+  var cx = (i % COLS) * CELL_W, cy = Math.floor(i / COLS) * CELL_H;
+  if (!cellCanvas) {
+    cellCanvas = document.createElement('canvas');
+    cellCanvas.width = CELL_W; cellCanvas.height = CELL_H;
+    cell2d = cellCanvas.getContext('2d', { willReadFrequently: true });
+  }
+  cell2d.putImageData(s2d.getImageData(cx, cy, CELL_W, CELL_H), 0, 0);
+  CELLPNG[i] = cellCanvas.toDataURL('image/png');
+  window.__criticCellPNG = function (k) { return CELLPNG[k] || null; };
+  document.title = 'CRITIC CELL ' + (i + 1) + '/' + PLAN.length;
+}
+
+var stepI = 0, cellCost = 0;
+function step() {
+  if (stepI >= PLAN.length) { finish(); return; }
+  if (DEADLINE && stepI > 0) {
+    var elapsed = performance.now() - T.t0;
+    if (elapsed + cellCost * 1.12 > DEADLINE) {
+      INFO.stoppedEarly = 'deadline: ' + Math.round(elapsed) + 'ms used, a cell costs ~' +
+        Math.round(cellCost) + 'ms, limit ' + DEADLINE + 'ms';
+      dbg(INFO.stoppedEarly);
+      finish(); return;
+    }
+  }
+  var tCell = performance.now();
+  var spec = PLAN[stepI];
+  try { renderCell(spec, stepI); }
+  catch (err) {
+    drawFail((stepI % COLS) * CELL_W, Math.floor(stepI / COLS) * CELL_H,
+      spec.kind + ' / ' + spec.cell, 'harness threw: ' + (err && err.message));
+    cwarn('cell ' + stepI + ' threw: ' + (err && err.stack || err));
+  }
+  publishCell(stepI);
+  cellCost = Math.max(cellCost, performance.now() - tCell);
+  stepI++;
+  requestAnimationFrame(step);
+}
+
+function finish() {
+  dbg('finish:begin');
+  INFO.timing.marks = T.marks.map(function (m) { return m[0] + '=' + Math.round(m[1]) + 'ms'; });
+  INFO.timing.totalMs = Math.round(performance.now() - T.t0);
+  try { INFO.rig = NZ.enemies && NZ.enemies.stats ? NZ.enemies.stats() : null; } catch (e) { INFO.rig = null; }
+  try { INFO.render = NZ.render ? { quality: NZ.render.quality, effects: NZ.render.effects } : null; } catch (e) {}
+  INFO.plan = PLAN;
+  INFO.rendered = stepI;
+  window.__criticInfo = INFO;
+  window.__criticPNG = function () { return sheet.toDataURL('image/png'); };
+  window.__criticCellPNG = function (k) { return CELLPNG[k] || null; };
+  document.title = 'CRITIC READY';
+  try { console.log('[critic] ' + JSON.stringify(INFO.timing)); } catch (e) {}
+  if (CRITIC_WARN.length) try { console.log('[critic] warnings: ' + CRITIC_WARN.join(' || ')); } catch (e) {}
+}
+
+/* one warm frame so shaders compile and nz-render allocates its targets
+   before the first cell is timed */
+window.__mark('setup');
+requestAnimationFrame(function () {
+  camera.position.set(0, M(1.6), M(6));
+  camera.lookAt(0, M(1.0), 0);
+  renderFrames(1);
+  window.__mark('warm');
+  requestAnimationFrame(step);
+});
+
+})();
+</script>
+</body>
+</html>

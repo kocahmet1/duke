@@ -1,0 +1,29 @@
+# Render Blueprint for NUKE ZONE 3D multiplayer.
+#
+# One web service: it serves the game files AND the small handshake socket the
+# browsers use to find each other. Gameplay traffic goes browser to browser and
+# never passes through this service. See MULTIPLAYER.md.
+#
+# In Render: New > Blueprint > pick this repo.
+services:
+  - type: web
+    name: nuke-zone-mp
+    runtime: node
+    # Closest Render region to Turkey. A region cannot be changed later.
+    region: frankfurt
+    # 0.5 CPU / 512 MB, always on (no sleeping, no one-minute wake-up).
+    # Bigger plans do not lower lag: the server is not in the gameplay path.
+    plan: 0.5c-512mb
+    buildCommand: npm install --omit=dev && npm run build
+    startCommand: node server/mp-server.mjs --dist
+    healthCheckPath: /healthz
+    envVars:
+      # Room size. Every player connects to every other, so keep this small.
+      - key: NZ_MAX_PLAYERS
+        value: "4"
+      # Optional relay for players who cannot connect directly (Cloudflare
+      # Realtime TURN). Leave both empty to run without it.
+      - key: CF_TURN_KEY_ID
+        sync: false
+      - key: CF_TURN_KEY_API_TOKEN
+        sync: false

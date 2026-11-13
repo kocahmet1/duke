@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SHOT BOOTING &mdash; LOOK-DEV STUDIO</title>
+<!--
+  MATERIAL LOOK-DEV STUDIO  (standalone: the game is NOT loaded)
+  -------------------------------------------------------------
+  Double-click this file. No query string, no clicks.
+
+  A controlled studio is worth more here than the level: a row of 64x48
+  spheres and chamfered cubes, one pair per material, on plinths over a
+  shadow-catching ground plane, lit by a NEUTRAL PMREM probe (grey dome +
+  three soft panels) instead of the game's orange night sky. Judging albedo
+  under the level's own IBL is how a material set ends up secretly tinted.
+
+  It still loads nz-core.js and nz-render.js, so the tone mapping, exposure,
+  bloom, SSAO, TAA and colour grade are byte-for-byte the ones the game ships.
+  Only the probe and the light rig are swapped for neutral ones.
+
+  Cell 4 carries the objective references: a chrome ball, a 50% grey ball,
+  white and black balls, and a 24-patch colour chart. Anything that shifts
+  hue, crushes the dark patches or blows the light ones is a tone-mapping or
+  colour-space defect and it will be visible there before anywhere else.
+
+  Wait for the tab title to read "SHOT READY", then screenshot.
+-->
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;
+    font-family:"Consolas","DejaVu Sans Mono","Courier New",monospace}
+  #view{display:block;position:fixed;left:0;top:0;width:100%;height:100%}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<!-- Configuration is read by nz-shots.js and must exist before it runs. -->
+<script>
+window.NZ_SHOT = {
+  scene: 'materials',
+  mode: 'studio',
+  width: 1600, height: 900,
+  cols: 2, rows: 2,
+  ss: 2,
+  settle: 20,
+  prewarm: 70,
+  seed: 20260802
+};
+</script>
+
+<!-- Same three.js the game uses: r149 is the last release shipping a UMD
+     build, which is what makes a plain file:// page work at all. -->
+<script src="https://unpkg.com/three@0.149.0/build/three.min.js"></script>
+<script>
+window.THREE || document.write(decodeURIComponent('%3Cscript%20src%3D%22https%3A%2F%2Fcdnjs.cloudflare.com%2Fajax%2Flibs%2Fthree.js%2Fr128%2Fthree.min.js%22%3E%3C%2Fscript%3E'));
+</script>
+<script>
+if (!window.THREE) document.title = 'SHOT ERROR - three.js failed to load';
+</script>
+
+<script src="nz-core.js"></script>
+<script src="nz-render.js"></script>
+<script src="nz-shots.js"></script>
+</body>
+</html>

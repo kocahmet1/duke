@@ -1,0 +1,12 @@
+dist/
+node_modules/
+.wrangler/
+.next/
+*.tsbuildinfo
+
+# screenshots and scratch output (kept out of the repo)
+_shots/
+_critic_shots/
+_tmp/
+_to_delete/
+.backup-*/
