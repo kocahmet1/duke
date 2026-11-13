@@ -44,7 +44,10 @@ Render deploys from a Git repository (GitHub, GitLab or Bitbucket).
 2. **In Render: New → Blueprint**, pick the repo. Render reads `render.yaml`
    and creates one web service, `nuke-zone-mp`:
    - region **Frankfurt** (closest to Turkey; a region can't be changed later)
-   - plan **0.5 CPU / 512 MB**: $7 a month, never sleeps
+   - plan **free**: sleeps after 15 minutes with no visitors and takes about a
+     minute to wake on the next page load; matches themselves are unaffected.
+     For instant loading, switch the service to **0.5c-512mb** ($7 a month,
+     never sleeps) in Render → the service → Settings → Instance Type.
    - build `npm install --omit=dev && npm run build`, start
      `node server/mp-server.mjs --dist`
 
@@ -56,7 +59,10 @@ Render deploys from a Git repository (GitHub, GitLab or Bitbucket).
    send the link to your friend.
 
 A bigger plan won't lower lag: the server isn't in the gameplay path. What
-matters is the connection between you and your friend.
+matters is the connection between you and your friend. On the free plan the
+server can fall asleep in the middle of a match; that's fine, because the
+players are already connected to each other. Only a new arrival has to wait
+the minute it takes to wake.
 
 ## If your friend can't connect: the relay
 

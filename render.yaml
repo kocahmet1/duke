@@ -11,9 +11,12 @@ services:
     runtime: node
     # Closest Render region to Turkey. A region cannot be changed later.
     region: frankfurt
-    # 0.5 CPU / 512 MB, always on (no sleeping, no one-minute wake-up).
-    # Bigger plans do not lower lag: the server is not in the gameplay path.
-    plan: 0.5c-512mb
+    # free: sleeps after 15 min with no visitors and takes about a minute to
+    # wake on the next page load. Matches are unaffected (players talk to each
+    # other directly). For instant loading switch to 0.5c-512mb ($7/month,
+    # always on). Bigger plans do not lower lag: the server is not in the
+    # gameplay path.
+    plan: free
     buildCommand: npm install --omit=dev && npm run build
     startCommand: node server/mp-server.mjs --dist
     healthCheckPath: /healthz
