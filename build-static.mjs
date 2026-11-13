@@ -79,6 +79,7 @@ const MODULES = [
   "nz-audio.js",
   "nz-destruct.js",
   "demo.js",
+  "nz-touch.js",
   "nz-net.js",
 ];
 

@@ -2,7 +2,15 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<!-- Phones (see MOBILE.md): draw under the notch -- the HUD already insets
+     itself with env(safe-area-inset-*) -- and run without browser bars when the
+     page is added to the home screen. -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Seydişehir Çatışma">
+<meta name="theme-color" content="#02040a">
 <title>Seydişehir Çatışma &mdash; Görev 1: Hollywood Kıyameti</title>
 <meta name="description" content="Retro bir tarayıcı nişancı oyunu: birbirine bağlı üst katlar, çatılar, yangın merdivenleri, asansörler ve yer altı servis yolları.">
 <meta property="og:title" content="Seydişehir Çatışma &mdash; Kompleks Artık Çok Katlı">
@@ -6206,6 +6214,33 @@ let mouseDown = false, fireQueued = false, adsDown = false, altQueued = false,
    nothing else in the game reads it. */
 let inspectMode = false;
 let mouseSens = .0023;
+/* A second input device -- nz-touch.js, the on-screen stick and look pad on a
+   phone -- drives the same player the keyboard and mouse do, through two
+   doors:
+
+     padAxis   an analog move vector. While `on`, fwd/str replace the WASD
+               digits in updatePlayer. Direction only: the speed is still the
+               game's own walk / run / sprint, and `walk` / `sprint` stand in
+               for ALT and SHIFT.
+     lookBy    the mouse-look handler's body, in mouse counts, so both devices
+               share one scoped-sensitivity rule and one pair of pitch stops.
+
+   With nothing writing padAxis this is exactly the keyboard game. */
+const padAxis = { on: false, fwd: 0, str: 0, walk: false, sprint: false };
+function lookBy(mx, my) {
+  /* Scoped sensitivity. Without it a 3.6x picture moves 3.6x faster than
+     the hand expects and the optic is unusable; with the full 1/3.6 it
+     feels glued. 0.42 is the compromise every game lands on.
+     It rides player.ads, NOT scopeMask, because the ZOOM rides player.ads:
+     hung off the mask it would stay at full sensitivity through the first
+     two thirds of the zoom and then drop off a cliff. */
+  const scoped = (WPN[player.weapon] || 0).scope && player.pending < 0;
+  const sens = mouseSens * (scoped ? lerp(1, .42, player.ads) : 1);
+  player.yaw -= mx * sens;
+  player.pitch = clamp(player.pitch - my * sens, -1.35, 1.35);
+  player.swayVX += clamp(mx, -80, 80) * .0022;
+  player.swayVY += clamp(my, -80, 80) * .0018;
+}
 
 function bindInput() {
   const cv = document.getElementById('view');
@@ -6252,24 +6287,15 @@ function bindInput() {
   }, { passive: true });
   document.addEventListener('mousemove', e => {
     if (!pointerLocked || !state.playing) return;
-    /* Scoped sensitivity. Without it a 3.6x picture moves 3.6x faster than
-       the hand expects and the optic is unusable; with the full 1/3.6 it
-       feels glued. 0.42 is the compromise every game lands on.
-       It rides player.ads, NOT scopeMask, because the ZOOM rides player.ads:
-       hung off the mask it would stay at full sensitivity through the first
-       two thirds of the zoom and then drop off a cliff. */
-    const scoped = (WPN[player.weapon] || 0).scope && player.pending < 0;
-    const sens = mouseSens * (scoped ? lerp(1, .42, player.ads) : 1);
-    player.yaw -= e.movementX * sens;
-    player.pitch = clamp(player.pitch - e.movementY * sens, -1.35, 1.35);
-    player.swayVX += clamp(e.movementX, -80, 80) * .0022;
-    player.swayVY += clamp(e.movementY, -80, 80) * .0018;
+    lookBy(e.movementX, e.movementY);
   });
   document.addEventListener('pointerlockchange', () => {
     pointerLocked = document.pointerLockElement === cv;
     if (!pointerLocked && state.playing) togglePause();
   });
-  cv.addEventListener('click', () => { if (state.playing && !pointerLocked) cv.requestPointerLock(); });
+  /* through lockMouse, which is guarded: iOS Safari has no pointer lock, and
+     nz-touch.js turns the lock off entirely while the screen is the controller */
+  cv.addEventListener('click', () => { if (state.playing && !pointerLocked) lockMouse(); });
 }
 function lockMouse() { const cv = document.getElementById('view'); if (cv.requestPointerLock) cv.requestPointerLock(); }
 
@@ -6299,11 +6325,15 @@ function toggleCrawl() {
 /* ------------------------------------------------------------- movement -- */
 function updatePlayer(dt) {
   if (!player.alive) { player.kick *= .9; return; }
-  const fwd = (keysDown.KeyW || keysDown.ArrowUp ? 1 : 0) - (keysDown.KeyS || keysDown.ArrowDown ? 1 : 0);
-  const str = (keysDown.KeyD || keysDown.ArrowRight ? 1 : 0) - (keysDown.KeyA || keysDown.ArrowLeft ? 1 : 0);
+  /* padAxis is the on-screen stick (nz-touch.js); while it is idle these are
+     the keys, bit for bit */
+  const fwd = padAxis.on ? padAxis.fwd
+    : (keysDown.KeyW || keysDown.ArrowUp ? 1 : 0) - (keysDown.KeyS || keysDown.ArrowDown ? 1 : 0);
+  const str = padAxis.on ? padAxis.str
+    : (keysDown.KeyD || keysDown.ArrowRight ? 1 : 0) - (keysDown.KeyA || keysDown.ArrowLeft ? 1 : 0);
   const crouching = !!(keysDown.ControlLeft || keysDown.ControlRight || keysDown.KeyC);
-  const walking = !!(keysDown.AltLeft || keysDown.AltRight);
-  const sprintHeld = !!(keysDown.ShiftLeft || keysDown.ShiftRight);
+  const walking = !!(keysDown.AltLeft || keysDown.AltRight || (padAxis.on && padAxis.walk));
+  const sprintHeld = !!(keysDown.ShiftLeft || keysDown.ShiftRight || (padAxis.on && padAxis.sprint));
   /* sprint input while prone reads as "get me up": try silently, and stay
      down if the ceiling says no */
   if (player.crawling && sprintHeld && (fwd || str)) standFromCrawl(true);
@@ -11362,7 +11392,9 @@ function drawMap(w, h) {
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   /* Keep edges crisp while protecting fill rate on 4K/retina displays. */
-  const dprCap = Math.min(2, Math.sqrt(8400000 / Math.max(1, w * h)));
+  /* NZ.dprCap is a lower ceiling a front-end may ask for: nz-touch.js sets
+     one on phones, whose screens are 3x and whose GPUs are not. Unset on a PC. */
+  const dprCap = Math.min(2, Math.sqrt(8400000 / Math.max(1, w * h)), (window.NZ && +NZ.dprCap) || 2);
   const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, dprCap));
   renderer.setPixelRatio(dpr);
   renderer.setSize(w, h, false);
@@ -11486,8 +11518,13 @@ function boot() {
     if (brief) brief.innerHTML = 'Güpegündüz 233. Sokak\'ta yokuş yukarı savaş. Ara sokaklar barikatlı.<br>Kırmızı kart 232. Sokak\'taki birinci kat dairesinde — sonra tepedeki kontrol noktasını yar.';
   }
   const canvas = el('view');
+  /* The post stack draws the world into its own multisampled target and only
+     a full-screen quad ever reaches the canvas, so canvas MSAA buys nothing
+     there -- and on a phone it still costs a resolve every frame. nz-touch.js
+     knows whether this is one. */
+  const phoneGPU = !!(window.NZ && NZ.touch && NZ.touch.phone);
   renderer = new THREE.WebGLRenderer({
-    canvas, antialias: true, alpha: false, powerPreference: 'high-performance', precision: 'highp'
+    canvas, antialias: !phoneGPU, alpha: false, powerPreference: 'high-performance', precision: 'highp'
   });
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -11639,11 +11676,24 @@ window.addEventListener('load', boot);
      daylight probe, so it must have registered before either installs. -->
 <script src="nz-street-sky.js"></script>
 <script src="nz-street-ground.js"></script>
-<script src="nz-buildings-asset.js"></script>
+<!-- 20 MB of Blender building mesh (and, below, 5 MB of van) that only
+     missions 1 and 4 draw: every street module is inert on 2 and 3, and
+     nz-buildings.js only reads the asset when nz-street.js asks it to. A page
+     ROUTED to mission 2 or 3 -- every multiplayer link is -- skips the
+     download and the parse, which on a phone is most of the load. Any other
+     address loads both exactly as before. Same regex boot() routes with, and
+     the same parser-blocking document.write as the three.js fallback, so the
+     load order is unchanged. -->
+<script>
+window.NZ_STREET_ASSETS = !/^[23]$/.test((/(?:[#&?])level=(1|2|3|4)/.exec(location.hash + '&' + location.search) || [])[1] || '');
+if (window.NZ_STREET_ASSETS) document.write(decodeURIComponent('%3Cscript%20src%3D%22nz-buildings-asset.js%22%3E%3C%2Fscript%3E'));
+</script>
 <script src="nz-buildings.js"></script>
 <script src="nz-street.js"></script>
 <script src="nz-street-entrance.js"></script>
-<script src="nz-courier-asset.js"></script>
+<script>
+if (window.NZ_STREET_ASSETS) document.write(decodeURIComponent('%3Cscript%20src%3D%22nz-courier-asset.js%22%3E%3C%2Fscript%3E'));
+</script>
 <script src="nz-street-props.js"></script>
 <script src="nz-street-park.js"></script>
 <script src="nz-street-side.js"></script>
@@ -11671,6 +11721,12 @@ window.addEventListener('load', boot);
 
 <!-- Optional demo director and capture rig; inert unless ?demo=1 is present. -->
 <script src="demo.js"></script>
+
+<!-- Phones and tablets (see MOBILE.md): the on-screen stick, look pad and
+     buttons, the HUD moved out from under the thumbs, menus that fit a short
+     screen, and the mobile-browser housekeeping. Does nothing at all until the
+     page is touched or is opened on a touch-first device. -->
+<script src="nz-touch.js"></script>
 
 <!-- Multiplayer deathmatch (browser to browser, see MULTIPLAYER.md). Last on
      purpose: it wraps game functions, so every module must have loaded first.

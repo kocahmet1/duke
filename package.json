@@ -16,7 +16,8 @@
     "check:glass": "node scripts/verify-hero-glass.mjs",
     "check:car-glass": "node scripts/verify-car-glass.mjs",
     "check:save": "node scripts/verify-save.mjs",
-    "check:mp": "node scripts/mp-smoke.mjs"
+    "check:mp": "node scripts/mp-smoke.mjs",
+    "check:touch": "node scripts/touch-smoke.mjs"
   },
   "type": "module",
   "engines": {

@@ -775,6 +775,16 @@
     NZ.log('gpu:', name || '(unknown)');
     if (!caps.hdr || !caps.depth) return 'low';
     if (/swiftshader|llvmpipe|software|basic render/i.test(name)) return 'low';
+    /* A phone or tablet starts on the tier nz-touch.js keeps for it (the
+       player changes it on the pause screen) instead of on a guess from the
+       GPU's name. Mobile browsers mask that string -- every iPhone reports
+       "Apple GPU" -- and the table below would read it as a desktop part and
+       hand a phone the full stack. Not pinned, so the frame-time ladder still
+       steps down from here if it has to. */
+    try {
+      var tq = NZ.touch && NZ.touch.startTier ? NZ.touch.startTier() : null;
+      if (tq && TIERS[tq]) { NZ.log('tier ' + tq + ' (touch device)'); return tq; }
+    } catch (eTouch) {}
     if (/mali|adreno\s*[1-5]\d\d|powervr|videocore/i.test(name)) return 'low';
     if (/intel.*(hd|uhd)\s*graphics|intel.*(gma|g33|g41)/i.test(name)) return 'low';
     if (/intel|iris|apple a\d/i.test(name)) return 'med';
@@ -4219,9 +4229,12 @@
         quality: tier,
         params: P,
         caps: caps,
-        setQuality: function (q) {
+        /* `adaptive` true leaves the frame-time ladder running on top of the
+           chosen tier: nz-touch.js uses it, because a phone's pick is a
+           ceiling to degrade from, not a pin. */
+        setQuality: function (q, adaptive) {
           if (!TIERS[q] || dead) return;
-          tier = q; degrade = 0; tierPinned = true;
+          tier = q; degrade = 0; tierPinned = !adaptive;
           adaptLocked = false; lastDegradeMed = 0; noGain = 0;
           applyEffects();
           applyLighting(!!envRT);
