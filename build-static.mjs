@@ -82,6 +82,16 @@ const MODULES = [
   "nz-net.js",
 ];
 
+/* PERSONAL files dress the local player.  nz-hero-look.js is the third-person
+   figure's look, with a photograph of a real person in it.  It ships when it
+   is in the folder -- the owner chose to put him on the live site
+   (2026-11-14) -- and is skipped cleanly when it is not: a clone without it
+   builds the stock figure instead of failing.  To leave it out on purpose:
+
+       node build-static.mjs --without-look       or       NZ_SHIP_LOOK=0        */
+const PERSONAL = ["nz-hero-look.js"];
+const SHIP_LOOK = !(process.argv.includes("--without-look") || process.env.NZ_SHIP_LOOK === "0");
+
 const exists = async (p) => { try { await stat(p); return true; } catch { return false; } };
 
 /* Best-effort clean.  Some sandboxes mount the project read-mostly and refuse
@@ -109,11 +119,18 @@ if (await exists(R("public", "game", "NUKEM.html"))) {
       `(${pubHtml.length} vs ${rootHtml.length} bytes) -- shipping the root copy`);
   }
 }
-await writeFile(path.join(gameDir, "NUKEM.html"), rootHtml);
+let outHtml = rootHtml;
+const held = [], shipped = [];
+for (const f of PERSONAL) {
+  if (SHIP_LOOK && (await exists(R(f)))) { shipped.push(f); continue; }
+  const tag = new RegExp(`[ \\t]*<script\\s+src=["']${f.replace(/[.]/g, "\\.")}["']\\s*>\\s*</script>[ \\t]*\\r?\\n?`, "g");
+  if (tag.test(outHtml)) { outHtml = outHtml.replace(tag, ""); held.push(f); }
+}
+await writeFile(path.join(gameDir, "NUKEM.html"), outHtml);
 
 /* 3. the modules, next to the page that asks for them */
 const copied = [];
-for (const m of MODULES) {
+for (const m of [...shipped, ...MODULES]) {
   if (!(await exists(R(m)))) { console.warn(`build: missing module ${m} -- not copied`); continue; }
   await copyFile(R(m), path.join(gameDir, m));
   copied.push(m);
@@ -159,3 +176,5 @@ if (missing.length) {
 console.log(
   `build ok: ${copied.length} module(s) + NUKEM.html -> dist/client/game/, ` +
   `${local}/${srcs.length} script tags local and all resolved`);
+if (shipped.length) console.log(`build: ${shipped.join(", ")} is in this build (personal: public wherever it is deployed)`);
+if (held.length) console.log(`build: left out ${held.join(", ")} (${SHIP_LOOK ? "not in the folder" : "--without-look"})`);

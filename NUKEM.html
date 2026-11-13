@@ -11636,7 +11636,13 @@ window.addEventListener('load', boot);
 <!-- Third-person view: chase camera, the visible player figure, and the aim
      correction a camera off the eye needs. After nz-weapons on purpose -- it
      instances those weapon models into the figure's hands. Entirely inert
-     while the view is FIRST PERSON (V in play, or the title / pause screen). -->
+     while the view is FIRST PERSON (V in play, or the title / pause screen).
+     nz-hero-look.js, first, is WHO the figure is: the face, hair, build and
+     clothes modelled on the photographs. It is data only (it sets
+     window.NZ_HERO_LOOK); without it the module builds its stock figure.
+     `npm run build` ships it when the file is present (it carries a real
+     person's portrait; --without-look leaves it out, see build-static.mjs). -->
+<script src="nz-hero-look.js"></script>
 <script src="nz-hero.js"></script>
 <script src="nz-audio.js"></script>
 <script src="nz-destruct.js"></script>

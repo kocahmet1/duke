@@ -146,10 +146,19 @@
     skin: '#c08c68',
     hair: {
       color: '#241a13',
-      /* 'short' | 'buzz' | 'medium' | 'long' | 'bald' */
+      /* 'short' | 'buzz' | 'crop' | 'medium' | 'long' | 'bald' */
       style: 'short',
       /* how far down the forehead the hairline starts, 0 (high) .. 1 (low) */
       line: 0.5
+      /* 'crop' -- short back and sides, a thick tousled top, a ragged fringe --
+         also reads (all optional, metres):
+           top 0.026     depth of hair on the crown
+           sides 0.007   over the ears          back 0.011   down the back
+           fringe 0.014  how far the locks hang below the roots at the front
+           jag 0.5       0 a straight fringe .. 1 very ragged
+           messy 0.5     0 smooth .. 1 tousled
+           burn -0.006   where the sideburn ends, above (+) / below (-) the eye line
+           nape -0.094   the neckline at the back, in the head's own heights */
     },
     /* 0 clean shaven .. 1 full beard. Up to ~0.4 reads as stubble. */
     beard: 0.22,
@@ -158,10 +167,26 @@
     build: {
       bulk: 1.0,        /* girth of trunk and limbs                          */
       shoulders: 1.0,   /* shoulder breadth                                  */
-      head: 1.0         /* head size                                         */
+      head: 1.0,        /* head size                                         */
+      neck: 1.0,        /* neck girth                                        */
+      /* Stature, as a fraction of the 1.83 m the game's eye height implies.
+         The whole figure (and the gun in his hands) scales about his feet and
+         the chase camera drops with him; the game's own eye, hit box and
+         first-person view do not change. */
+      height: 1.0
     },
+    /* The head fitted to a person: see "fitting the head" beside faceBump.
+         head: { y: [[canonical, actual], ...], w: [[canonical, k], ...],
+                 f: [[canonical, k], ...],
+                 nose: 1, brow: 1, socket: 1, cheek: 1, lips: 1, chin: 1,   bump gains
+                 earY: -0.008, earSize: 1, earOut: 0.35 }                   ears
+       null is the stock head. */
+    head: null,
     top: {
-      /* 'jacket' | 'hoodie' | 'tshirt' | 'shirt' */
+      /* 'jacket' | 'hoodie' | 'sweater' | 'tshirt' | 'shirt'
+         'sweater' is a crew-neck sweatshirt: rib neck, cuffs and hem, dropped
+         shoulders, cut loose (loose: 0 fitted .. 1 square; neckline: height
+         of the front of the neck opening, 1.512) */
       type: 'jacket',
       color: '#39443a',
       trim: '#20261f',  /* collar, cuffs, hem band                           */
@@ -171,7 +196,9 @@
       zip: true
     },
     bottom: {
-      /* 'jeans' | 'trousers' | 'shorts' */
+      /* 'jeans' | 'trousers' | 'track' | 'shorts'
+         'track' is tracksuit bottoms: elastic waist, rib cuffs; stripe: a
+         colour puts a double stripe down the outside of the leg */
       type: 'jeans',
       color: '#2b3a55',
       stitch: '#b48a4c',
@@ -218,6 +245,9 @@
        cut out along the jaw and hairline. */
     face: null
   };
+  /* the stock figure, kept apart from whatever a look file makes of LOOK:
+     other players' puppets wear this one (section 11) */
+  var LOOK_STOCK = JSON.parse(JSON.stringify(LOOK));
   (function mergeLook() {
     var o = global.NZ_HERO_LOOK;
     if (!o || typeof o !== 'object') return;
@@ -266,6 +296,9 @@
     /* eslint-enable no-undef */
     return !!(G.player && G.WPN && G.state && G.shotBlocked && G.castWall);
   }
+  /* world units per metre of the FIGURE: the game's scale times his stature */
+  function heroScale() { return G.M * clamp(fin(LOOK.build && LOOK.build.height, 1), 0.5, 1.3); }
+  function heroTall() { return clamp(fin(LOOK.build && LOOK.build.height, 1), 0.5, 1.3); }
   /* `skyMesh` is a `let` the game assigns late (makeSky, and the street sky
      module may swap it), so it is read fresh rather than cached. */
   function skyOf() {
@@ -401,6 +434,8 @@
           /* the same cosmetic reload nz-weapons plays on the viewmodel */
           var S2 = G.state;
           if (HERO && S2 && S2.playing && !S2.paused && !S2.ended) heroReload();
+        } else if (e.code === 'KeyU' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          if (SHOW.on) showcaseOff(); else showcaseOn();
         }
       } catch (err) { panic(err, 'key'); }
     });
@@ -689,24 +724,24 @@
 
   function updateBlend(dt) {
     var P = G.player, W = G.WPN[P.weapon];
-    cam.t = toward(cam.t, (VIEW.third && !DEAD) ? 1 : 0, dt / 0.26);
+    cam.t = toward(cam.t, ((VIEW.third || SHOW.active) && !DEAD) ? 1 : 0, dt / 0.26);
     /* Behind glass the sight picture is drawn at the eye, so a scoped weapon
        pulls the lens home over the first half of the mount. By the time the
        game's eyepiece starts to close (ads 0.62) this is already first person
        and the ordinary scope path runs untouched. */
-    var scopeK = (W && W.scope && P.pending < 0 && P.alive) ? band(fin(P.ads), 0.20, 0.50) : 0;
+    var scopeK = (!SHOW.active && W && W.scope && P.pending < 0 && P.alive) ? band(fin(P.ads), 0.20, 0.50) : 0;
     /* Backed into a corner there is no room for a boom: under about half a
        metre of it the lens would sit inside the figure's head. Rather than
        hide him and leave the player looking at nothing, the view goes home to
        the eye -- weapon and all -- and comes back out when there is room. */
     /* Latched, with a wide gap between in and out: a boom that hovers on the
        threshold must not flip the view every other frame. */
-    if (!cam.init || cam.t <= 0 || !P.alive) cam.tightOn = false;
+    if (!cam.init || cam.t <= 0 || !P.alive || SHOW.active) cam.tightOn = false;
     else if (cam.free < 2.3) cam.tightOn = true;
     else if (cam.free > 3.6) cam.tightOn = false;
     cam.tight = damp(cam.tight, cam.tightOn ? 1 : 0, 2e-4, dt);
     VIEW.blend = sstep(cam.t) * (1 - scopeK) * (1 - sstep(cam.tight));
-    VIEW.hideVM = VIEW.blend > 0.5;
+    VIEW.hideVM = VIEW.blend > 0.5 || SHOW.active;
   }
 
   function updateCamera(dt) {
@@ -717,11 +752,14 @@
     var yaw = P.yaw + fin(P.recoilYaw);
     var pitchFP = clamp(P.pitch + fin(P.kick) * .012 + fin(P.recoilPitch), -1.5, 1.5);
     var eyeY = P.y - fin(P.stepSm) + fin(P.eyeH, G.EYE);
-    if (!cam.init || Math.abs(eyeY - cam.pivotY) > 9) {
-      cam.pivotY = eyeY; cam.init = true; cam.boom = CAMT.hip.back; cam.free = CAMT.hip.back; cam.k1 = 1;
+    /* the boom hangs off the FIGURE'S eye, which is the game's eye unless he
+       is shorter or taller than the game's 1.71 m */
+    var pivY = P.y - fin(P.stepSm) + fin(P.eyeH, G.EYE) * heroTall();
+    if (!cam.init || Math.abs(pivY - cam.pivotY) > 9) {
+      cam.pivotY = pivY; cam.init = true; cam.boom = CAMT.hip.back; cam.free = CAMT.hip.back; cam.k1 = 1;
     }
     /* stance changes move the eye in one frame; the boom follows in ~90 ms */
-    cam.pivotY = damp(cam.pivotY, eyeY, 2e-6, dt);
+    cam.pivotY = damp(cam.pivotY, pivY, 2e-6, dt);
 
     cam.deadT = P.alive ? 0 : Math.min(1, cam.deadT + dt / 1.5);
     var dk = sstep(cam.deadT);
@@ -739,6 +777,9 @@
     var back = lerp(CAMT.hip.back, CAMT.ads.back, ads);
     var lk = low * (1 - ads * .6);
     side = lerp(side, CAMT.low.side, lk); up = lerp(up, CAMT.low.up, lk); back = lerp(back, CAMT.low.back, lk);
+    /* a smaller figure is framed from proportionally closer */
+    var fk = lerp(1, heroTall(), 0.6);
+    side *= fk; up *= fk; back *= fk;
     back *= 1 + 0.07 * fin(P.dash) + 0.40 * dk;
     up += 2.6 * dk;
     /* Looking up swings the boom down into the floor. Shorten it and take the
@@ -768,7 +809,8 @@
     /* ---- what the crosshair is on ----------------------------------------- */
     solveAim(cam.x, cam.y, cam.z, fx, fy, fz, P.x, eyeY, P.z, 400);
 
-    if (b <= 0.0005) return;
+    if (SHOW.active) cam.aimOK = false;      /* the crosshair means nothing from in front of him */
+    if (b <= 0.0005 && !SHOW.active && SHOW.k <= 0) return;
 
     /* ---- hand it to the renderer ------------------------------------------- */
     var fpY = eyeY + fin(P.bob);
@@ -790,11 +832,234 @@
 
     var sky = skyOf();
     if (sky) sky.position.copy(c.position);
+    if (SHOW.active || SHOW.k > 0) showcaseCamera(c, dt);
+  }
+
+  /* =========================================================================
+     THE SHOWCASE (U)
+     U swings the camera round from behind him to his front and frames the
+     whole figure; the wheel zooms in to his face; the mouse turns the camera
+     round him. U again swings it back and gives everything back.
+
+     While it is up the game is in its own inspect mode (Y): the enemies are
+     statues and nothing hurts -- unless inspect was already on, in which case
+     it is left on afterwards too. And his own controls are held, because a
+     camera in front of him turns every key backwards: updatePlayer runs with
+     the keys, the stick and the trigger released (he idles, the gun lowered),
+     and lookBy -- the one door both the mouse and the touch look pad use --
+     turns the camera instead of the man. A click made meanwhile is spent, not
+     saved for later.
+     ====================================================================== */
+  var SHOW = {
+    on: false,          /* what U last asked for                                  */
+    active: false,      /* on, or still swinging back                             */
+    k: 0,               /* the swing: 0 the game's own camera .. 1 in front of him */
+    zoom: 0, zoomT: 0,  /* 0 the whole figure .. 1 his face                       */
+    az: 0, el: 0,       /* the mouse: round him, and up or down, radians          */
+    rad: -1,            /* the distance actually used, after the walls had a say  */
+    inspectSet: false   /* inspect mode was switched on by U, so U switches it off */
+  };
+  VIEW.showcase = false;
+  var SHOW_IN = 1.05, SHOW_OUT = 0.60;                   /* seconds per swing */
+
+  function inspectGet() {
+    /* eslint-disable no-undef */
+    try { return (typeof inspectMode !== 'undefined') ? !!inspectMode : false; } catch (e) { return false; }
+  }
+  function inspectSet(v) {
+    try { if (typeof inspectMode !== 'undefined') inspectMode = !!v; } catch (e) { }
+    /* eslint-enable no-undef */
+  }
+  var showCss = false;
+  function showcaseClass(on) {
+    var doc = global.document;
+    if (!doc || !doc.body) return;
+    if (!showCss && doc.head) {
+      showCss = true;
+      var st = doc.createElement('style');
+      st.textContent = 'body.nz-showcase #cross{visibility:hidden!important}';
+      doc.head.appendChild(st);
+    }
+    if (doc.body.classList) doc.body.classList.toggle('nz-showcase', !!on);
+  }
+  /* the way to stand: the clearest of a few headings round his front, so a
+     wall in front of his face does not leave the lens pressed against it */
+  function showcaseHeading() {
+    var P = G.player, MU = G.M, tall = heroTall(), yaw = P.yaw;
+    var fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    var y = P.y - fin(P.stepSm) + fin(P.eyeH, G.EYE) * tall * 0.75, L = 2.6 * MU * tall;
+    var best = 0, bestF = -1, tries = [0, 0.45, -0.45, 0.9, -0.9, 1.35, -1.35];
+    for (var i = 0; i < tries.length; i++) {
+      var a = tries[i], hx = fx * Math.cos(a) + rx * Math.sin(a), hz = fz * Math.cos(a) + rz * Math.sin(a);
+      var f = sweep(P.x, y, P.z, P.x + hx * L, y, P.z + hz * L, hz, -hx);
+      if (f > bestF + 0.12) { bestF = f; best = a; }
+      if (f >= 0.999) break;
+    }
+    return best;
+  }
+  function showcaseOn() {
+    var ST = G.state, P = G.player;
+    if (SHOW.on || DEAD || !NZ.flags.hero || !HERO || !ST || !ST.playing || ST.ended || !P || !P.alive) return false;
+    SHOW.on = true; SHOW.active = true; VIEW.showcase = true;
+    SHOW.zoomT = 0; SHOW.el = 0; SHOW.rad = -1;
+    try { SHOW.az = showcaseHeading(); } catch (e) { SHOW.az = 0; }
+    if (!inspectGet()) { inspectSet(true); SHOW.inspectSet = true; }
+    showcaseClass(true);
+    if (G.message) G.message('SHOWCASE \u2022 WHEEL ZOOMS \u2022 MOUSE TURNS \u2022 U RETURNS');
+    return true;
+  }
+  function showcaseOff() {
+    if (!SHOW.on) return false;
+    SHOW.on = false;                    /* the swing back; showcaseDone() lands it */
+    return true;
+  }
+  function showcaseDone() {
+    SHOW.on = false; SHOW.active = false; SHOW.k = 0; SHOW.rad = -1; VIEW.showcase = false;
+    if (SHOW.inspectSet) { if (inspectGet()) inspectSet(false); SHOW.inspectSet = false; }
+    showcaseClass(false);
+  }
+  function showcaseStep(dt) {
+    if (!SHOW.active) return;
+    var ST = G.state, P = G.player;
+    /* death, the end of the level, a restart, the module failing: out at once */
+    if (DEAD || !HERO || !ST || ST.ended || !ST.booted || !P || !P.alive) { showcaseDone(); return; }
+    SHOW.k = toward(SHOW.k, SHOW.on ? 1 : 0, dt / (SHOW.on ? SHOW_IN : SHOW_OUT));
+    if (SHOW.on) SHOW.zoom = damp(SHOW.zoom, SHOW.zoomT, 2e-3, dt);
+    if (!SHOW.on && SHOW.k <= 0) showcaseDone();
+  }
+  /* lookBy, while the showcase is up: the mouse (or the look pad) turns the
+     camera round him. Right moves the lens to the right, up tips the view up. */
+  function showcaseOrbit(mx, my) {
+    if (!SHOW.on) return;
+    SHOW.az = angWrap(SHOW.az - fin(mx) * 0.0045);
+    SHOW.el = clamp(SHOW.el + fin(my) * 0.0030, -0.32, 0.95);
+  }
+  function showcaseWheel(e) {
+    if (!SHOW.active) return;
+    /* the wheel is the weapon switch the rest of the time: not now */
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (!SHOW.on) return;
+    var d = fin(e.deltaY);
+    if (e.deltaMode === 1) d *= 40; else if (e.deltaMode === 2) d *= 800;
+    /* one notch of an ordinary wheel is an eighth of the way to his face */
+    SHOW.zoomT = clamp(SHOW.zoomT - clamp(d, -240, 240) * 0.00125, 0, 1);
+  }
+
+  /* Hold his controls for the length of one updatePlayer, then put them back
+     exactly as they were -- no input event can arrive in the middle of a
+     synchronous call, so nothing is lost but the presses spent meanwhile. */
+  function holdInputs(fn, self, args) {
+    /* eslint-disable no-undef */
+    var K = null, md = false, ad = false, pad = null;
+    try {
+      if (typeof keysDown === 'object' && keysDown) { K = {}; for (var k in keysDown) { K[k] = keysDown[k]; keysDown[k] = false; } }
+      if (typeof mouseDown !== 'undefined') { md = mouseDown; mouseDown = false; }
+      if (typeof adsDown !== 'undefined') { ad = adsDown; adsDown = false; }
+      if (typeof fireQueued !== 'undefined') fireQueued = false;
+      if (typeof altQueued !== 'undefined') altQueued = false;
+      if (typeof padAxis === 'object' && padAxis) { pad = !!padAxis.on; padAxis.on = false; }
+    } catch (e) { }
+    try { return fn.apply(self, args); }
+    finally {
+      try {
+        if (K) for (var k2 in K) keysDown[k2] = K[k2];
+        if (typeof mouseDown !== 'undefined') mouseDown = md;
+        if (typeof adsDown !== 'undefined') adsDown = ad;
+        if (typeof fireQueued !== 'undefined') fireQueued = false;
+        if (typeof altQueued !== 'undefined') altQueued = false;
+        if (pad !== null) padAxis.on = pad;
+      } catch (e2) { }
+    }
+    /* eslint-enable no-undef */
+  }
+  /* Function declarations in a classic script are properties of the global
+     object and every call resolves them there, so a wrapper put on window is
+     the one the game's own frame() and nz-touch.js call. With the showcase
+     down both wrappers are a single test and a pass-through. */
+  function wrapShowcase() {
+    var g = global;
+    if (typeof g.updatePlayer === 'function' && !g.updatePlayer.nzShowcase) {
+      var up = g.updatePlayer;
+      var wu = function () { return SHOW.active ? holdInputs(up, this, arguments) : up.apply(this, arguments); };
+      wu.nzShowcase = true;
+      g.updatePlayer = wu;
+    }
+    if (typeof g.lookBy === 'function' && !g.lookBy.nzShowcase) {
+      var lb = g.lookBy;
+      var wl = function (mx, my) { if (SHOW.active) { showcaseOrbit(mx, my); return undefined; } return lb.apply(this, arguments); };
+      wl.nzShowcase = true;
+      g.lookBy = wl;
+    } else if (typeof g.lookBy !== 'function' && g.addEventListener) {
+      /* An older page with no lookBy: its mousemove handler turns the player
+         itself. Take the movement on the window, before it reaches that
+         handler on the document, while the showcase is up. */
+      g.addEventListener('mousemove', function (e) {
+        if (!SHOW.active) return;
+        e.stopImmediatePropagation();
+        try { showcaseOrbit(e.movementX, e.movementY); } catch (err) { panic(err, 'orbit'); }
+      }, true);
+    }
+    if (g.addEventListener) g.addEventListener('wheel', function (e) { try { showcaseWheel(e); } catch (err) { panic(err, 'wheel'); } }, { capture: true, passive: false });
+  }
+
+  var _sqA = null, _sqB = null, _smm = null, _sup = null, _stg = null;
+  function showcaseCamera(c, dt) {
+    var P = G.player, MU = G.M, tall = heroTall(), H = HERO;
+    if (!_sqA) { _sqA = new THREE.Quaternion(); _sqB = new THREE.Quaternion(); _smm = new THREE.Matrix4(); _sup = new THREE.Vector3(0, 1, 0); _stg = new THREE.Vector3(); }
+    var e = sstep(SHOW.k), z = sstep(clamp(SHOW.zoom, 0, 1));
+    var footY = P.y - fin(P.stepSm), eyeW = footY + fin(P.eyeH, G.EYE) * tall;
+    var proneK = H ? fin(H.st.proneK) : 0;
+    /* what the lens looks at: the middle of him, rising to his eyes */
+    var tx = P.x, tz = P.z, ty = lerp(footY + 0.55 * (eyeW - footY), eyeW + 0.012 * MU * tall, z);
+    /* how far: the whole of him in a 40 degree frame with a margin, closing to
+       a head-and-shoulders at 30 degrees -- on a log scale, so every notch of
+       the wheel is the same step to the eye */
+    var extent = Math.max((eyeW - footY) * 1.09, proneK * 1.75 * tall * MU);
+    var fovFull = 40, fovFace = 30;
+    var dFull = extent * 1.24 / (2 * Math.tan(fovFull * PI / 360)), dFace = 0.72 * MU * tall;
+    var d = dFull * Math.pow(dFace / dFull, z), fov = lerp(fovFull, fovFace, z);
+    var el = clamp(lerp(0.10, 0.02, z) + SHOW.el, -0.40, 1.10);
+
+    /* the figure's own frame: he faces his yaw */
+    var yaw = P.yaw, fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    /* where the game's camera is now, as an angle round him (0 dead ahead, +
+       toward his right), a distance out and a height; the swing runs from
+       there, round his right side, to the showcase */
+    var ax = c.position.x - tx, az = c.position.z - tz, rA = Math.sqrt(ax * ax + az * az);
+    var phA = rA > 0.30 * MU ? Math.atan2(ax * rx + az * rz, ax * fx + az * fz) : PI;
+    var phB = SHOW.az, dph = angWrap(phB - phA);
+    var ph = phA + dph * e;
+    var rB = d * Math.cos(el), yB = ty + d * Math.sin(el);
+    var r = lerp(rA, rB, e), y = lerp(c.position.y, yB, e);
+    var hx = fx * Math.cos(ph) + rx * Math.sin(ph), hz = fz * Math.cos(ph) + rz * Math.sin(ph);
+    var px = tx + hx * r, pz = tz + hz * r;
+
+    /* the walls: the same swept box the boom uses, out from the middle of him */
+    var dx = px - tx, dy = y - ty, dz = pz - tz, L = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (L > 1e-4) {
+      var fr = sweep(tx, ty, tz, px, y, pz, hz, -hx), allowed = L;
+      if (fr < 1) allowed = Math.max(0.30 * MU * tall, L * fr - CAMT.margin);
+      /* in at once, out gently, like the boom */
+      SHOW.rad = (SHOW.rad < 0 || allowed < SHOW.rad) ? allowed : Math.min(allowed, damp(SHOW.rad, allowed, 0.01, dt) + dt * 0.8 * MU);
+      var kk = Math.min(1, SHOW.rad / L);
+      px = tx + dx * kk; y = ty + dy * kk; pz = tz + dz * kk;
+    }
+
+    _sqA.copy(c.quaternion);
+    c.position.set(px, y, pz);
+    _stg.set(tx, ty, tz);
+    _smm.lookAt(c.position, _stg, _sup);
+    _sqB.setFromRotationMatrix(_smm);
+    c.quaternion.copy(_sqA).slerp(_sqB, e);
+    var f = lerp(c.fov, fov, e);
+    if (Math.abs(c.fov - f) > 0.01) { c.fov = f; c.updateProjectionMatrix(); }
+    var sky = skyOf();
+    if (sky) sky.position.copy(c.position);
   }
 
   /* ---- the two corrections a chase camera owes a shooter ------------------ */
   NZ.on('aimDir', function (org, dir) {
-    if (DEAD || !NZ.flags.hero || VIEW.blend < 0.5 || !cam.init) return undefined;
+    if (DEAD || !NZ.flags.hero || VIEW.blend < 0.5 || !cam.init || SHOW.active) return undefined;
     try {
       /* The game has just put the camera back at the eye for this tick, so the
          aim angles are this frame's. The boom is last frame's -- which is the
@@ -822,7 +1087,7 @@
   });
 
   NZ.on('tracerFrom', function () {
-    if (DEAD || !NZ.flags.hero || VIEW.blend < 0.5 || !HERO || !HERO.muzzleOK || !cam.aimOK) return undefined;
+    if (DEAD || !NZ.flags.hero || VIEW.blend < 0.5 || !HERO || !HERO.muzzleOK || !cam.aimOK || SHOW.active) return undefined;
     try {
       var m = HERO.muzzleW;
       var dx = cam.ax - m.x, dy = cam.ay - m.y, dz = cam.az - m.z;
@@ -1095,15 +1360,21 @@
   /* ---- top garment parameters, from LOOK ---------------------------------- */
   function topSpec() {
     var t = LOOK.top || {}, ty = t.type || 'jacket';
+    var sw = ty === 'sweater';
     var s = {
       type: ty,
-      thick: ty === 'jacket' ? 0.013 : ty === 'hoodie' ? 0.015 : ty === 'shirt' ? 0.006 : 0.004,
-      hem: ty === 'jacket' ? 0.990 : ty === 'hoodie' ? 0.972 : ty === 'shirt' ? 0.965 : 0.985,
-      flare: ty === 'jacket' ? 0.010 : ty === 'hoodie' ? 0.012 : 0.006,
+      thick: ty === 'jacket' ? 0.013 : ty === 'hoodie' ? 0.015 : sw ? 0.015 : ty === 'shirt' ? 0.006 : 0.004,
+      hem: ty === 'jacket' ? 0.990 : ty === 'hoodie' ? 0.972 : sw ? 0.948 : ty === 'shirt' ? 0.965 : 0.985,
+      flare: ty === 'jacket' ? 0.010 : ty === 'hoodie' ? 0.012 : sw ? 0.003 : 0.006,
       long: (t.sleeves || (ty === 'tshirt' ? 'short' : 'long')) === 'long',
       hood: !!t.hood || ty === 'hoodie',
       collar: ty === 'jacket' || ty === 'shirt',
-      band: ty === 'jacket' || ty === 'hoodie'
+      band: ty === 'jacket' || ty === 'hoodie' || sw,
+      /* a sweatshirt: cut loose and square, gathered by a rib band at the hem
+         and at each wrist, with a rib crew neck lying on the collarbones */
+      boxy: sw ? clamp(fin(t.loose, 0.8), 0, 1) : 0,
+      gather: sw,
+      crew: sw
     };
     return s;
   }
@@ -1139,11 +1410,19 @@
       if (y <= 1.500) return W1('chest');
       return W2('chest', 'neck', (y - 1.500) / 0.06);
     }
+    /* a loose garment hangs from the chest instead of following the waist in */
+    var rc = sampleRows(rows, 1.36), boxA = rc[1] * bk + T.thick, boxB = rc[2] * bk + T.thick;
     function ring(y, extra, shade, vy) {
       var r = sampleRows(rows, y);
       var girth = y > 1.40 ? lerp(bk, 1, 0.5) * lerp(1, shW, band(y, 1.38, 1.47)) : bk;
+      var ra = r[1] * girth + extra, rb = r[2] * bk + extra;
+      if (T.boxy > 0 && extra > 0.002 && y < 1.36) {
+        /* free above the hem band, which pulls it back in to the hips */
+        var kb = T.boxy * band(y, T.hem + 0.012, T.hem + 0.085);
+        ra = lerp(ra, Math.max(ra, boxA * 0.955), kb); rb = lerp(rb, Math.max(rb, boxB * 0.93), kb);
+      }
       return {
-        c: [0, y, r[3]], a: X, b: Z, ra: r[1] * girth + extra, rb: r[2] * bk + extra, n: r[4],
+        c: [0, y, r[3]], a: X, b: Z, ra: ra, rb: rb, n: r[4],
         v: tv(vy === undefined ? y : vy), w: wAt(y), s: shade === undefined ? 1 : shade
       };
     }
@@ -1166,19 +1445,32 @@
       rings.push(ring(up[i], T.thick * (up[i] > 1.50 ? lerp(1, 0.35, band(up[i], 1.50, 1.55)) : 1),
         up[i] > 1.535 ? 0.80 : 1));
     }
+    if (T.crew) {
+      /* a crew neck shows the base of the neck inside it, so the top of the
+         trunk has to BE there: carry it in onto the neck and close it. What
+         is cloth and what is skin up here is the atlas's business. */
+      var nr = 0.055 * lerp(1, bk, 0.5) * fin(LOOK.build.neck, 1);
+      rings.push({ c: [0, 1.558, 0.024], a: X, b: Z, ra: nr + 0.006, rb: nr * 1.04 + 0.006, n: 2.0, v: 1, w: W2('chest', 'neck', 0.9), s: 0.86 });
+      rings.push({ c: [0, 1.566, 0.022], a: X, b: Z, ra: nr - 0.003, rb: nr * 1.04 - 0.003, n: 2.0, v: 1, w: W1('neck'), s: 0.80 });
+    }
     tube(pile, rings, 28, TILES.torso, { capStart: true });
     return T;
   }
 
   function buildNeck(pile) {
     var rows = [[1.520, 0.058, 0.026], [1.548, 0.055, 0.023], [1.580, 0.054, 0.018], [1.612, 0.055, 0.012], [1.640, 0.058, 0.008]];
-    var rings = [];
+    var rings = [], nk = fin(LOOK.build.neck, 1), fit = !!LOOK.head;
+    /* a fitted head has a real jaw, narrower than the neck it sits on: the
+       neck then has to run on up inside the skull, and it stands in the
+       jaw's shadow */
+    if (fit) rows.push([1.668, 0.057, 0.008]);
     for (var i = 0; i < rows.length; i++) {
       var y = rows[i][0];
       rings.push({
-        c: [0, y, rows[i][2]], a: X, b: Z, ra: rows[i][1] * lerp(1, LOOK.build.bulk, 0.5), rb: rows[i][1] * 1.04,
-        v: i / (rows.length - 1), s: i === 0 ? 0.78 : y > 1.60 ? 0.82 : 0.94,
-        w: y < 1.535 ? W2('chest', 'neck', 0.6) : y < 1.60 ? W1('neck') : W2('neck', 'head', (y - 1.60) / 0.04)
+        c: [0, y, rows[i][2]], a: X, b: Z, ra: rows[i][1] * lerp(1, LOOK.build.bulk, 0.5) * nk,
+        rb: rows[i][1] * 1.04 * nk,
+        v: i / (rows.length - 1), s: i === 0 ? 0.78 : fit ? lerp(0.90, 0.56, band(y, 1.560, 1.615)) : y > 1.60 ? 0.82 : 0.94,
+        w: y < 1.535 ? W2('chest', 'neck', 0.6) : y < 1.60 ? W1('neck') : W2('neck', 'head', clamp((y - 1.60) / 0.04, 0, 1))
       });
     }
     tube(pile, rings, 16, TILES.skin);
@@ -1236,12 +1528,15 @@
     var cloth = [], skin = [], i, s, r;
     for (i = 0; i < rows.length; i++) {
       s = rows[i][0]; r = rows[i][1] * lr;
-      if (s <= cut) cloth.push(ringAt(s, r + T.thick * 0.85 * band(s, -0.07, -0.03), s < -0.03 ? 0.8 : 1));
-      else skin.push(ringAt(s, r, 1));
+      if (s <= cut) {
+        /* a gathered sleeve is full down the forearm and pulled in by its cuff */
+        var gk = T.gather ? lerp(1.12, 0.42, band(s, tot - 0.075, tot - 0.022)) * lerp(1, 1.15, band(s, 0.10, 0.36)) : 1;
+        cloth.push(ringAt(s, r + T.thick * 0.85 * gk * band(s, -0.07, -0.03), s < -0.03 ? 0.8 : 1));
+      } else skin.push(ringAt(s, r, 1));
     }
     if (T.long) {
       /* cuff: a band standing proud of the wrist, then the dark mouth of the sleeve */
-      cloth.push(ringAt(tot + 0.004, 0.038 * lr + T.thick * 0.5, 0.9));
+      cloth.push(ringAt(tot + 0.004, 0.038 * lr + T.thick * (T.gather ? 0.30 : 0.5), 0.9));
       cloth.push(ringAt(tot + 0.002, 0.028 * lr, 0.38, tot));
     } else {
       cloth.push(ringAt(cut + 0.012, sampleRows(rows, cut + 0.012)[1] * lr + T.thick + 0.004, 0.9));
@@ -1261,6 +1556,8 @@
     var hx = sg * 0.092, inner = sg > 0 ? NX : X;
     var shorts = (LOOK.bottom.length || 'long') !== 'long' || LOOK.bottom.type === 'shorts';
     var cutY = shorts ? 0.545 : -1;
+    /* tracksuit bottoms: soft and full in the leg, gathered at the ankle */
+    var track = LOOK.bottom.type === 'track', ease = track ? 0.013 : 0.004;
     /*        y      ra     rb     cz      shade */
     var rows = [
       [0.950, 0.092, 0.110, 0.016], [0.900, 0.096, 0.113, 0.016], [0.840, 0.096, 0.110, 0.013],
@@ -1286,10 +1583,17 @@
     var cloth = [], skin = [], i, y;
     for (i = 0; i < rows.length; i++) {
       y = rows[i][0];
-      if (y >= cutY) cloth.push(ringAt(y, rows[i][1] * lr + 0.004, rows[i][2] * lr + 0.004, rows[i][3], y > 0.90 ? 0.8 : 1));
-      else skin.push(ringAt(y, rows[i][1] * lr - 0.004, rows[i][2] * lr - 0.004, rows[i][3], 1));
+      if (y >= cutY) {
+        var ez = track ? ease * lerp(1, 1.25, band(y, 0.16, 0.34)) * lerp(0.75, 1, band(y, 0.95, 0.80)) : ease;
+        cloth.push(ringAt(y, rows[i][1] * lr + ez, rows[i][2] * lr + ez, rows[i][3], y > 0.90 ? 0.8 : 1));
+      } else skin.push(ringAt(y, rows[i][1] * lr - 0.004, rows[i][2] * lr - 0.004, rows[i][3], 1));
     }
-    if (!shorts) {
+    if (!shorts && track) {
+      /* the cuff: a rib band tight on the ankle, the leg blousing over it */
+      cloth.push(ringAt(0.118, 0.046 * lerp(1, lr, 0.5), 0.049 * lerp(1, lr, 0.5), 0.004, 0.96));
+      cloth.push(ringAt(0.092, 0.044 * lerp(1, lr, 0.5), 0.047 * lerp(1, lr, 0.5), 0.004, 0.92));
+      cloth.push(ringAt(0.097, 0.034, 0.036, 0.004, 0.36, 0.088));
+    } else if (!shorts) {
       cloth.push(ringAt(0.090, 0.053, 0.056, 0.004, 0.92));
       cloth.push(ringAt(0.097, 0.037, 0.039, 0.004, 0.36, 0.088));
     } else {
@@ -1391,25 +1695,89 @@
     ]
   };
   function gauss(x, c, s) { var d = (x - c) / s; return Math.exp(-d * d); }
-  /* Outward push of the face at (phi = angle off dead ahead, hy). */
+
+  /* ---- fitting the head to a particular person ------------------------------
+     Everything about this head -- the profile table above, the bumps of the
+     face, the unwrap of its texture -- is written in ONE set of heights, the
+     table's own ("canonical": eyes at 0, nose tip at -0.040, the mouth at
+     -0.0705, the chin at -0.112). A real face keeps those landmarks in the same
+     order but not at the same distances: a child's nose and jaw are shorter,
+     the chin narrower. LOOK.head moves the canonical head onto the person:
+
+       y   [[canonical, actual], ...]  where each height of the table really
+           is on this face, metres above the eye line. Geometry is built at
+           the actual height; the texture stays laid out in canonical height,
+           so a feature and its bump can never drift apart.
+       w   [[canonical, k], ...]       half-width multiplier by height (the
+           jaw and chin are where faces differ most)
+       f   [[canonical, k], ...]       depth-to-the-front multiplier (profile)
+
+     Both are piecewise linear and clamped at the ends. Without LOOK.head every
+     function here returns exactly what it always did. */
+  function lut(tbl, x) {
+    /* monotone cubic (Fritsch-Carlson) through the table: a fitted head must
+       not carry a crease round it at every knot */
+    var n = tbl.length, i;
+    if (!n) return x;
+    if (n === 1 || x <= tbl[0][0]) return tbl[0][1];
+    if (x >= tbl[n - 1][0]) return tbl[n - 1][1];
+    for (i = 0; i < n - 2; i++) if (x <= tbl[i + 1][0]) break;
+    function sec(k) { var d = tbl[k + 1][0] - tbl[k][0]; return d > 1e-9 ? (tbl[k + 1][1] - tbl[k][1]) / d : 0; }
+    function tan(k) {
+      if (k <= 0) return sec(0);
+      if (k >= n - 1) return sec(n - 2);
+      var a = sec(k - 1), c = sec(k);
+      if (a * c <= 0) return 0;
+      var h0 = tbl[k][0] - tbl[k - 1][0], h1 = tbl[k + 1][0] - tbl[k][0];
+      return (3 * (h0 + h1)) / ((2 * h1 + h0) / a + (h1 + 2 * h0) / c);       /* weighted harmonic mean */
+    }
+    var h = tbl[i + 1][0] - tbl[i][0];
+    if (h <= 1e-9) return tbl[i + 1][1];
+    var t = (x - tbl[i][0]) / h, t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * tbl[i][1] + (t3 - 2 * t2 + t) * h * tan(i) + (-2 * t3 + 3 * t2) * tbl[i + 1][1] + (t3 - t2) * h * tan(i + 1);
+  }
+  /* actual height of a canonical one, and back */
+  function headY(hy) { var S = LOOK.head; return (S && S.y && S.y.length > 1) ? lut(S.y, hy) : hy; }
+  function headYinv(y) {
+    var S = LOOK.head;
+    if (!(S && S.y && S.y.length > 1)) return y;
+    var lo = HEAD.y0 - 0.02, hi = HEAD.y1 + 0.02;
+    for (var i = 0; i < 28; i++) { var m = (lo + hi) / 2; if (lut(S.y, m) < y) lo = m; else hi = m; }
+    return (lo + hi) / 2;
+  }
+  /* the profile table's row at a canonical height, fitted: [hy, W, F, B] */
+  function headRow(hy) {
+    var r = sampleRows(HEAD.rows, hy), S = LOOK.head;
+    if (S) {
+      if (S.w && S.w.length) r[1] *= lut(S.w, hy);
+      if (S.f && S.f.length) r[2] *= lut(S.f, hy);
+      if (S.b && S.b.length) r[3] *= lut(S.b, hy);
+    }
+    return r;
+  }
+  /* Outward push of the face at (phi = angle off dead ahead, hy). The heights
+     the features sit at are the table's; a fitted head may move them (all in
+     canonical height): noseTip -0.040, noseBase -0.056, lipY -0.068,
+     underLip -0.084, chinY -0.104, browY 0.020. */
   function faceBump(phi, hy) {
-    var a = Math.abs(phi), d = 0;
+    var a = Math.abs(phi), d = 0, S = LOOK.head || {};
+    var tip = fin(S.noseTip, -0.040), base = fin(S.noseBase, -0.056), lipY = fin(S.lipY, -0.068);
     /* nose: a ridge from the bridge down to the tip, then cut back under it */
-    var np = hy > -0.040 ? band(hy, 0.012, -0.040) : band(hy, -0.056, -0.040);
-    d += 0.0215 * np * gauss(a, 0, 0.150 + 0.05 * band(hy, -0.02, -0.045));
-    d += 0.0045 * gauss(hy, 0.020, 0.012) * (1 - band(a, 0.75, 1.05));          /* brow ridge   */
-    d -= 0.0075 * gauss(hy, 0.000, 0.013) * gauss(a, 0.36, 0.17);               /* eye sockets  */
-    d += 0.0040 * gauss(hy, -0.022, 0.018) * gauss(a, 0.80, 0.22);              /* cheekbones   */
-    d += 0.0034 * gauss(hy, -0.068, 0.009) * gauss(a, 0, 0.26);                 /* lips         */
-    d -= 0.0020 * gauss(hy, -0.084, 0.007) * gauss(a, 0, 0.22);                 /* under lip    */
-    d += 0.0042 * gauss(hy, -0.104, 0.012) * gauss(a, 0, 0.30);                 /* chin         */
+    var np = hy > tip ? band(hy, 0.012, tip) : band(hy, base, tip);
+    d += 0.0215 * fin(S.nose, 1) * np * gauss(a, 0, (0.150 + 0.05 * band(hy, tip + 0.020, tip - 0.005)) * fin(S.noseWide, 1));
+    d += 0.0045 * fin(S.brow, 1) * gauss(hy, fin(S.browY, 0.020), 0.012) * (1 - band(a, 0.75, 1.05));   /* brow ridge   */
+    d -= 0.0075 * fin(S.socket, 1) * gauss(hy, 0.000, 0.013) * gauss(a, 0.36, 0.17);                    /* eye sockets  */
+    d += 0.0040 * fin(S.cheek, 1) * gauss(hy, -0.022, 0.018) * gauss(a, 0.80, 0.22);                    /* cheekbones   */
+    d += 0.0034 * fin(S.lips, 1) * gauss(hy, lipY, 0.009) * gauss(a, 0, 0.26);                          /* lips         */
+    d -= 0.0020 * gauss(hy, fin(S.underLip, -0.084), 0.007) * gauss(a, 0, 0.22);                        /* under lip    */
+    d += 0.0042 * fin(S.chin, 1) * gauss(hy, fin(S.chinY, -0.104), 0.012) * gauss(a, 0, 0.30);          /* chin         */
     return d;
   }
   /* A point on the head at ring angle th (0 back, PI/2 the figure's right, PI
      front) and height hy, pushed `extra` metres further out along the ring. */
   function headPoint(th, hy, extra, out) {
     var hk = LOOK.build.head;
-    var r = sampleRows(HEAD.rows, hy);
+    var r = headRow(hy);
     var W = r[1], F = r[2], B = r[3];
     var c = Math.cos(th), s = Math.sin(th);
     var e = 2 / HEAD.n;
@@ -1427,24 +1795,81 @@
       var nl = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
       x += nx / nl * extra; yy += ny / nl * extra; z += nz / nl * extra;
     }
-    out[0] = x * hk; out[1] = HEAD.eyeY + yy * hk; out[2] = HEAD.cz + z * hk;
+    /* built at the height this row really sits at on this face */
+    out[0] = x * hk; out[1] = HEAD.eyeY + (headY(hy) + (yy - hy)) * hk; out[2] = HEAD.cz + z * hk;
     return out;
   }
   /* Hairline height (hy) as a function of the angle off dead ahead. */
   function hairLine(phi) {
-    var a = Math.abs(phi), ln = fin(LOOK.hair && LOOK.hair.line, 0.5);
-    var top = lerp(0.086, 0.060, ln);
-    var k = [[0, top - 0.004], [0.50, top + 0.004], [0.88, 0.046], [1.12, -0.018], [1.30, 0.004], [1.48, 0.026],
-      [1.78, -0.010], [2.15, -0.070], [PI, -0.082]];
+    var a = Math.abs(phi), HR = LOOK.hair || {}, ln = fin(HR.line, 0.5);
+    var top = lerp(0.086, 0.060, ln), k;
+    if (HR.style === 'crop') {
+      /* a short crop: the roots run nearly straight across the forehead, drop
+         almost square at the temple, come down as a short sideburn in front
+         of the ear, hug the top of the ear and end in a low neckline */
+      var bn = fin(HR.burn, -0.006), nape = fin(HR.nape, -0.094), tc = fin(HR.temple, 0.86);
+      k = [[0, top], [tc - 0.30, top + 0.001], [tc - 0.06, top - 0.007], [tc + 0.05, 0.034], [tc + 0.15, 0.012], [tc + 0.28, bn], [tc + 0.40, bn + 0.006],
+        [1.40, 0.025], [1.62, 0.024], [1.80, -0.004], [2.10, lerp(-0.004, nape, 0.72)], [2.55, nape], [PI, nape + 0.003]];
+    } else {
+      k = [[0, top - 0.004], [0.50, top + 0.004], [0.88, 0.046], [1.12, -0.018], [1.30, 0.004], [1.48, 0.026],
+        [1.78, -0.010], [2.15, -0.070], [PI, -0.082]];
+    }
     for (var i = 0; i < k.length - 1; i++) if (a <= k[i + 1][0]) {
       return lerp(k[i][1], k[i + 1][1], sstep((a - k[i][0]) / (k[i + 1][0] - k[i][0])));
     }
     return k[k.length - 1][1];
   }
+  /* How far (metres along the scalp) the point (phi, hy) is from the roots:
+     positive in the hair, negative on bare skin. Measured to the hairline as
+     a CURVE, not straight down -- at the temple the line runs nearly
+     vertical, and a shell that only knows "how far above" grows a staircase
+     there instead of an edge. */
+  function hairDist(phi, hy) {
+    var dv = hy - hairLine(phi), best = Math.abs(dv), R = 0.086;
+    if (best > 0.045) return dv;
+    for (var k = 1; k <= 16; k++) {
+      var dp = k * 0.028, dx = R * dp;
+      if (dx >= best) break;
+      for (var sg = -1; sg <= 1; sg += 2) {
+        var dy = hy - hairLine(angWrap(phi + sg * dp)), dd = Math.sqrt(dx * dx + dy * dy);
+        if (dd < best) best = dd;
+      }
+    }
+    return dv >= 0 ? best : -best;
+  }
+  /* A crop is clipped short where it meets the skin: the body of the hair
+     stops a little short of the roots at the sides and back, and what runs on
+     down to the line is stubble, which is the atlas's to paint. 0 across the
+     forehead, where the fringe hangs instead. */
+  function cropLift(phi) {
+    var HR = LOOK.hair || {}, a = Math.abs(phi), tc = fin(HR.temple, 0.86);
+    var t0 = fin(HR.clipTemple, 0.010), t1 = fin(HR.clipSide, 0.026), t2 = fin(HR.clipBack, 0.030);
+    if (a < tc + 0.22) return t0 * band(a, tc - 0.12, tc + 0.22);
+    if (a < 1.75) return lerp(t0, t1, band(a, tc + 0.22, 1.45));
+    return lerp(t1, t2, band(a, 1.75, 2.5));
+  }
+  /* 0 across the forehead, 1 from the temple round the back */
+  function cropSide(phi) { var tc = fin(LOOK.hair && LOOK.hair.temple, 0.86); return band(Math.abs(phi), tc - 0.12, tc + 0.22); }
   function hairThick(phi, hy) {
     var st = (LOOK.hair && LOOK.hair.style) || 'short';
     if (st === 'bald') return 0;
     var a = Math.abs(phi), topK = band(hy, 0.050, 0.105);
+    if (st === 'crop') {
+      /* Short at the sides and back, a thick tousled mop on top. "On top" is
+         where the scalp faces the sky -- the back of the head is as high as
+         the crown and must not get the crown's depth of hair. */
+      var HR = LOOK.hair, r = headRow(hy), e = 2 / HEAD.n, cth = -Math.cos(phi), sth = Math.sin(a);
+      var hx = r[1] * Math.pow(Math.abs(sth), e), hz = (cth >= 0 ? r[3] : r[2]) * Math.pow(Math.abs(cth), e);
+      var nx = hx / (0.077 * 0.077), ny = Math.max(0, hy - 0.020) / (0.105 * 0.105), nz = hz / (0.100 * 0.100);
+      var up = band(ny / (Math.sqrt(nx * nx + ny * ny + nz * nz) || 1), 0.40, 0.86), front = 1 - band(a, 0.9, 2.3);
+      var low = lerp(fin(HR.sides, 0.007), fin(HR.back, 0.011), band(a, 1.6, 2.5));
+      var t = lerp(low, fin(HR.top, 0.022) * lerp(0.74, 1, front), up);
+      /* tousled: tufts, two sizes of them, standing out of the mass */
+      var m = fin(HR.messy, 0.5);
+      var tuft = Math.sin(phi * 5.3 + hy * 61) * Math.sin(phi * 2.1 - hy * 113 + 1.7) * 0.30 +
+        Math.sin(phi * 11.7 - hy * 187 + 0.6) * Math.sin(phi * 7.9 + hy * 143 + 2.3) * 0.20;
+      return t * (1 + m * tuft * lerp(0.35, 1, up));
+    }
     if (st === 'buzz') return 0.0035 + 0.002 * topK;
     if (st === 'medium' || st === 'long') {
       var back = band(a, 1.3, 2.4);
@@ -1465,7 +1890,7 @@
         var c = Math.cos(th);
         /* baked shade: under the chin, the eye sockets, under the nose */
         var phi = angWrap(th - PI);
-        var sh = 1 - 0.30 * band(hy, -0.100, -0.128) - 0.14 * gauss(hy, 0.002, 0.012) * gauss(Math.abs(phi), 0.34, 0.16) * (c < 0 ? 1 : 0)
+        var sh = 1 - (LOOK.head ? 0.46 * band(hy, -0.110, -0.129) : 0.30 * band(hy, -0.100, -0.128)) - 0.14 * gauss(hy, 0.002, 0.012) * gauss(Math.abs(phi), 0.34, 0.16) * (c < 0 ? 1 : 0)
           - 0.12 * gauss(hy, -0.052, 0.007) * gauss(phi, 0, 0.16) * (c < 0 ? 1 : 0);
         pile.vert(pt[0], pt[1], pt[2], TILES.head.x + (j / COLS) * TILES.head.w, TILES.head.y + t * TILES.head.h, sh, w);
       }
@@ -1483,20 +1908,43 @@
     for (j = 0; j < COLS; j++) pile.tri(top, lastRow + j, lastRow + j + 1);
 
     /* ears */
+    var SH = LOOK.head || {};
     for (var s = 0; s < 2; s++) {
       var sg = s ? -1 : 1, hk = LOOK.build.head;
-      var ex = sg * (0.0765 * hk + 0.004), ey = HEAD.eyeY - 0.008 * hk, ez = HEAD.cz + 0.012;
-      blob(pile, [ex, ey, ez], 0.0075, 0.031 * hk, 0.0165 * hk, 8, 6, TILES.skin, w,
-        { a: [sg * 0.94, 0, 0.34], b: [-sg * 0.34, 0, 0.94], up: [sg * 0.10, 0.99, 0.06], s: 0.9 });
+      if (SH.earOut === undefined && SH.earY === undefined && SH.earSize === undefined) {
+        var ex = sg * (0.0765 * hk + 0.004), ey = HEAD.eyeY - 0.008 * hk, ez = HEAD.cz + 0.012;
+        blob(pile, [ex, ey, ez], 0.0075, 0.031 * hk, 0.0165 * hk, 8, 6, TILES.skin, w,
+          { a: [sg * 0.94, 0, 0.34], b: [-sg * 0.34, 0, 0.94], up: [sg * 0.10, 0.99, 0.06], s: 0.9 });
+      } else {
+        /* a fitted ear: rooted along its front edge on the side of the head at
+           the height it really sits, and swung out from there by earOut
+           radians -- the back edge is the one that stands off the skull */
+        var eyA = fin(SH.earY, -0.008), es = fin(SH.earSize, 1), eo = clamp(fin(SH.earOut, 0.35), 0, 1.2);
+        var wE = headRow(headYinv(eyA))[1], rz = 0.0165 * hk * es;
+        var na = [sg * Math.cos(eo), 0, -Math.sin(eo)], lb = [sg * Math.sin(eo), 0, Math.cos(eo)];
+        var fx = sg * (wE * hk - 0.0015), fz = HEAD.cz + 0.001;
+        blob(pile, [fx + lb[0] * rz * 0.90, HEAD.eyeY + eyA * hk, fz + lb[2] * rz * 0.90], 0.0068 * es, 0.031 * hk * es, rz, 8, 6, TILES.skin, w,
+          { a: na, b: lb, up: [sg * 0.08, 0.99, 0.05], s: 0.9 });
+      }
     }
   }
 
   function buildHair(pile) {
     var st = (LOOK.hair && LOOK.hair.style) || 'short';
     if (st === 'bald') return;
-    var w = W1('head'), COLS = 44, ROWS = 30, i, j, pt = [0, 0, 0];
-    var hy0 = -0.094, hy1 = HEAD.y1;
-    var start = pile.n, row = COLS + 1, keep = [];
+    var crop = st === 'crop', HR = LOOK.hair || {};
+    var w = W1('head'), COLS = crop ? 64 : 44, ROWS = crop ? 42 : 30, i, j, pt = [0, 0, 0];
+    var hy0 = crop ? -0.118 : -0.094, hy1 = HEAD.y1, dh = (hy1 - hy0) / ROWS;
+    var start = pile.n, row = COLS + 1, keep = [], lock = [];
+    /* the crop's fringe: locks of uneven length hanging off the front roots.
+       Three rows of the grid are spent on it, slid down each column to that
+       column's own length, so the edge is ragged without being stair-stepped. */
+    var FRN = 3, frMax = clamp(fin(HR.fringe, 0.014), 0, 0.05), frJag = clamp(fin(HR.jag, 0.5), 0, 1);
+    function fringeLen(phi, col) {
+      if (!crop || frMax <= 0) return 0;
+      var n = 0.5 + 0.5 * Math.sin(col * 2.399 + 0.7) * Math.sin(col * 0.83 + 2.1);
+      return frMax * gauss(phi, fin(HR.part, 0), 0.66) * (1 - frJag * 0.62 * n);
+    }
     for (i = 0; i <= ROWS; i++) {
       var t = i / ROWS, hy = lerp(hy0, hy1, t);
       for (j = 0; j <= COLS; j++) {
@@ -1507,6 +1955,37 @@
         var fr = (st === 'medium' || st === 'long') ? gauss(phi, 0, 0.75) * band(hy, L - 0.030, L) * (1 - edge) : 0;
         var th2 = hairThick(phi, hy);
         var ex = edge > 0 ? th2 * edge : (fr > 0.05 ? 0.010 * fr : -0.0025);
+        if (crop) {
+          var fl = fringeLen(phi, j % COLS), hold = fl > 0.0015 ? 0.40 * clamp(fl / Math.max(1e-4, frMax), 0, 1) : 0;
+          var dS = hairDist(phi, hy) - cropLift(phi), eg = band(dS, -0.002, 0.012);
+          if (hy >= L && hold > 0) {
+            /* over the forehead the hair does not thin out to the roots: it is
+               the mass the fringe hangs from */
+            keep.push(true);
+            headPoint(th, hy, th2 * Math.max(eg, hold), pt);
+          } else if (hy < L && fl > 0.0015 && Math.ceil((L - hy) / dh - 1e-6) <= FRN) {
+            var q = Math.ceil((L - hy) / dh - 1e-6) / FRN;
+            headPoint(th, L - fl * q, lerp(hairThick(phi, L) * hold, 0.0016, Math.pow(q, 0.7)), pt);
+            keep.push(true); lock[keep.length - 1] = true;
+          } else if (eg <= 0.001 && hy + dh <= hy1 + 1e-6 && band(hairDist(phi, hy + dh) - cropLift(phi), -0.002, 0.012) > 0.001) {
+            /* the last vertex below the edge of the hair: slide it up its own
+               column onto the edge, lying on the scalp, so the hair ends in a
+               line there and not in a row of grid-sized cliffs */
+            var lo = hy, hi = hy + dh;
+            for (var bs = 0; bs < 14; bs++) {
+              var md = (lo + hi) / 2;
+              if (hairDist(phi, md) - cropLift(phi) > -0.0015) hi = md; else lo = md;
+            }
+            keep.push(true);
+            headPoint(th, hi, 0.0005, pt);
+          } else {
+            keep.push(eg > 0.001);
+            headPoint(th, hy, eg > 0 ? th2 * eg : -0.0025, pt);
+          }
+          pile.vert(pt[0], pt[1], pt[2], TILES.hair.x + (j / COLS) * TILES.hair.w, TILES.hair.y + t * TILES.hair.h,
+            hy >= L ? 0.88 + 0.12 * band(hy - L, 0, 0.03) : 0.80, w);
+          continue;
+        }
         headPoint(th, hy, ex, pt);
         keep.push(edge > 0.001 || fr > 0.05);
         /* strands lie along v; a little baked shade toward the hairline */
@@ -1517,6 +1996,8 @@
     for (i = 0; i < ROWS; i++) for (j = 0; j < COLS; j++) {
       var a = i * row + j, b = a + 1, c = a + row, d = c + 1;
       if (!(keep[a] || keep[b] || keep[c] || keep[d])) continue;
+      /* a lock ends at its tip: no skirt from there down into the forehead */
+      if (!keep[a] && !keep[b] && lock[c] && lock[d]) continue;
       pile.tri(start + a, start + b, start + c); pile.tri(start + b, start + d, start + c);
     }
     headPoint(0, hy1, hairThick(0, hy1), pt);
@@ -1633,6 +2114,28 @@
     line(t, up, 'rgba(255,255,255,' + (0.035 * Math.min(1.6, depth)) + ')', lw, 20 * depth, lw + 1);
   }
 
+  /* Height (m) of a crew neckline round the trunk: u .25 is the back of the
+     neck, .75 the hollow of the throat, where it dips. */
+  function crewLine(u) { return lerp(1.548, fin(LOOK.top.neckline, 1.512), 0.5 - 0.5 * Math.cos(TAU * (u - 0.25))); }
+  /* The cloth's weave is grained into the whole trunk tile after it is
+     painted -- including the patch of bare skin inside a crew neck. Put that
+     patch back: smooth, and in the shadow of the collar and the chin. */
+  function crewSkin(ic, ih) {
+    var t = TILES.torso, sk = hexRGB(LOOK.skin);
+    for (var py = 0; py < t.ph; py++) {
+      var v = 1 - (py - TILE_PAD) / (t.ph - 2 * TILE_PAD), y = TV.y0 + v * (TV.y1 - TV.y0);
+      if (y < 1.49) continue;
+      for (var px = 0; px < t.pw; px++) {
+        var u = (px - TILE_PAD) / (t.pw - 2 * TILE_PAD), d = y - crewLine(clamp(u, 0, 1));
+        if (d <= 0.0006) continue;
+        var o = ((t.py + py) * ATLAS + t.px + px) * 4;
+        var n = hash1(px * 3.7 + py * 91.3), k = (0.74 + 0.22 * band(d, 0, 0.030)) * (0.985 + 0.03 * n);
+        ic[o] = sk[0] * k; ic[o + 1] = sk[1] * k * 0.985; ic[o + 2] = sk[2] * k * 0.97;
+        ih[o] = ih[o + 1] = ih[o + 2] = 128;
+      }
+    }
+  }
+
   function paintTop(T) {
     var t = TILES.torso, top = hexRGB(LOOK.top.color), trim = hexRGB(LOOK.top.trim || LOOK.top.color);
     var vB = tv(T.hem - 0.008);
@@ -1683,6 +2186,65 @@
       g.save(); g.fillStyle = css(un);
       g.beginPath(); g.moveTo(t.X(0.70), t.Y(1)); g.lineTo(t.X(0.80), t.Y(1)); g.lineTo(t.X(0.75), t.Y(tv(1.488))); g.closePath(); g.fill();
       g.restore();
+    } else if (T.type === 'sweater') {
+      /* rib hem band */
+      band2(t, 0, vB, 1, vB + 0.066, css(trim), 0.92);
+      for (var i3 = 0; i3 < 96; i3++) {
+        var u3 = (i3 + 0.5) / 96;
+        line(t, [[u3, vB + 0.003], [u3, vB + 0.064]], 'rgba(0,0,0,.20)', 1.2, -18, 1.8);
+      }
+      line(t, [[0, vB + 0.068], [1, vB + 0.068]], 'rgba(0,0,0,.36)', 1.6, -30, 3);
+      /* the body blousing over it */
+      crease(t, [[0.02, vB + 0.090], [0.14, vB + 0.100], [0.25, vB + 0.092], [0.37, vB + 0.102], [0.48, vB + 0.090]], 0.9, 3);
+      crease(t, [[0.53, vB + 0.092], [0.64, vB + 0.104], [0.75, vB + 0.094], [0.86, vB + 0.104], [0.97, vB + 0.092]], 0.9, 3);
+      /* dropped shoulders: the armhole seam sits down on the arm, so all the
+         trunk carries is the shoulder seam running out from the neck */
+      seam(t, [[0.045, tv(1.468)], [0.004, tv(1.452)]], null);
+      seam(t, [[0.455, tv(1.468)], [0.5, tv(1.452)]], null);
+      seam(t, [[0.545, tv(1.468)], [0.5, tv(1.452)]], null);
+      seam(t, [[0.955, tv(1.468)], [0.996, tv(1.452)]], null);
+      /* THE CREW NECK. The neckline dips at the front; above it is the base of
+         the neck, and that is skin. The rib band follows the line. */
+      var sk = hexRGB(LOOK.skin), NP = 48, q, g2;
+      var yN = crewLine;
+      var sheets = [[PAINT.g, css(sk)], [PAINT.gh, grey(128)], [PAINT.gr, grey(0.60 * 255)]];
+      for (var sI = 0; sI < 3; sI++) {
+        g2 = sheets[sI][0];
+        g2.save();
+        g2.beginPath(); g2.rect(t.px, t.py, t.pw, t.ph); g2.clip();
+        g2.fillStyle = sheets[sI][1];
+        g2.beginPath(); g2.moveTo(t.px, t.py - 2);
+        g2.lineTo(t.px, t.Y(tv(yN(0))));
+        for (q = 0; q <= NP; q++) g2.lineTo(q === 0 ? t.px : q === NP ? t.px + t.pw : t.X(q / NP), t.Y(tv(yN(q / NP))));
+        g2.lineTo(t.px + t.pw, t.py - 2); g2.closePath(); g2.fill();
+        g2.restore();
+      }
+      /* the throat sits in the shadow of the jaw */
+      blotch(t, 0.75, 1.0, 0.16, 0.05, [40, 16, 12], 0.30);
+      blotch(t, 0.25, 1.0, 0.20, 0.04, [20, 12, 10], 0.34);
+      /* the band: 24 mm of rib standing a little proud, shaded where it rolls */
+      var bw = 0.024, bandPts = [], lipPts = [], lowPts = [];
+      for (q = 0; q <= NP; q++) {
+        var uq = q / NP;
+        bandPts.push([uq, tv(yN(uq) - bw * 0.5)]); lipPts.push([uq, tv(yN(uq) - 0.0015)]); lowPts.push([uq, tv(yN(uq) - bw)]);
+      }
+      line(t, bandPts, css(trim), Math.abs(t.H(tv(0.8 + bw) - tv(0.8))), 14, Math.abs(t.H(tv(0.8 + bw) - tv(0.8))) + 1);
+      var gr2 = PAINT.gr;
+      gr2.save(); gr2.beginPath(); gr2.rect(t.px, t.py, t.pw, t.ph); gr2.clip();
+      gr2.strokeStyle = grey(0.92 * 255); gr2.lineWidth = Math.abs(t.H(tv(0.8 + bw) - tv(0.8))); gr2.beginPath();
+      for (q = 0; q <= NP; q++) { if (q) gr2.lineTo(t.X(bandPts[q][0]), t.Y(bandPts[q][1])); else gr2.moveTo(t.X(bandPts[q][0]), t.Y(bandPts[q][1])); }
+      gr2.stroke(); gr2.restore();
+      for (var r3 = 0; r3 < 132; r3++) {
+        var ur = (r3 + 0.5) / 132;
+        line(t, [[ur, tv(yN(ur) - bw + 0.002)], [ur, tv(yN(ur) - 0.002)]], 'rgba(0,0,0,.24)', 1.1, -16, 1.6);
+      }
+      line(t, lipPts, 'rgba(0,0,0,.40)', 1.6, -26, 2.6);
+      line(t, lowPts, 'rgba(0,0,0,.34)', 1.5, -30, 3);
+      /* cloth pulled between the shoulders and hanging off the chest */
+      crease(t, [[0.62, tv(1.40)], [0.70, tv(1.37)], [0.75, tv(1.33)]], 0.6, 3);
+      crease(t, [[0.88, tv(1.40)], [0.80, tv(1.37)], [0.75, tv(1.33)]], 0.6, 3);
+      crease(t, [[0.58, tv(1.26)], [0.67, tv(1.21)], [0.74, tv(1.19)]], 0.5, 3);
+      crease(t, [[0.92, tv(1.26)], [0.83, tv(1.21)], [0.76, tv(1.19)]], 0.5, 3);
     } else if (T.type === 'hoodie') {
       band2(t, 0, vB, 1, vB + 0.050, css(trim), 0.92);
       for (var i2 = 0; i2 < 70; i2++) {
@@ -1725,7 +2287,8 @@
     seam(sl, [[0.004, 0], [0.004, 1]], null);
     seam(sl, [[0.996, 0], [0.996, 1]], null);
     /* armhole */
-    seam(sl, [[0, sv(0.012)], [0.25, sv(0.005)], [0.5, sv(-0.012)], [0.75, sv(0.005)], [1, sv(0.012)]], thread, T.type === 'jacket');
+    if (T.type === 'sweater') seam(sl, [[0, sv(0.030)], [0.25, sv(0.072)], [0.5, sv(0.096)], [0.75, sv(0.072)], [1, sv(0.030)]], thread, false);
+    else seam(sl, [[0, sv(0.012)], [0.25, sv(0.005)], [0.5, sv(-0.012)], [0.75, sv(0.005)], [1, sv(0.012)]], thread, T.type === 'jacket');
     if (T.long) {
       if (T.band) {
         band2(sl, 0, 0, 1, sv(tot - 0.052), css(trim), 0.92);
@@ -1755,6 +2318,7 @@
     var jeans = (LOOK.bottom.type || 'jeans') === 'jeans';
     var thread = jeans ? st : css(col, lum(col) > 0.35 ? 0.7 : 1.5);
     var vB = tv(T.hem - 0.008);
+    if (LOOK.bottom.type === 'track') { paintTrack(t, col, thread, vB); return; }
     band2(t, 0, 0, 1, vB, col, jeans ? 0.90 : 0.84);
     /* seat and thigh fade, dark in the fork */
     if (jeans) {
@@ -1841,6 +2405,73 @@
     /* thigh drag lines */
     crease(lg, [[0.60, lv(0.86)], [0.74, lv(0.835)], [0.90, lv(0.85)]], 0.5, 2.5);
     crease(lg, [[0.58, lv(0.80)], [0.72, lv(0.78)], [0.86, lv(0.79)]], 0.4, 2.5);
+  }
+
+  /* Tracksuit bottoms: knit, no belt, no fly, no rivets -- an elastic waist
+     with a drawcord, slant pockets, a soft leg and a rib cuff at the ankle. */
+  function paintTrack(t, col, thread, vB) {
+    var i, u, stripe = LOOK.bottom.stripe ? hexRGB(LOOK.bottom.stripe) : null;
+    band2(t, 0, 0, 1, vB, col, 0.88);
+    blotch(t, 0.25, tv(0.83), 0.07, 0.07, [0, 0, 0], 0.30);
+    blotch(t, 0.75, tv(0.83), 0.07, 0.07, [0, 0, 0], 0.30);
+    /* the waistband: gathered elastic */
+    band2(t, 0, tv(1.016), 1, tv(1.066), css(col, 1.10), 0.90, 9);
+    for (i = 0; i < 72; i++) {
+      u = (i + 0.5) / 72;
+      line(t, [[u, tv(1.018)], [u + 0.004 * Math.sin(i * 1.7), tv(1.064)]], 'rgba(0,0,0,.24)', 1.2, -15, 1.8);
+    }
+    line(t, [[0, tv(1.016)], [1, tv(1.016)]], 'rgba(0,0,0,.40)', 1.5, -26, 2.6);
+    line(t, [[0, tv(1.066)], [1, tv(1.066)]], 'rgba(0,0,0,.40)', 1.5, -22, 2.4);
+    line(t, [[0.738, tv(1.040)], [0.728, tv(0.955)]], css(col, 2.4), 2.0, 18, 2.4);      /* drawcord */
+    line(t, [[0.762, tv(1.040)], [0.770, tv(0.965)]], css(col, 2.4), 2.0, 18, 2.4);
+    /* seams: sides, seat and rise */
+    seam(t, [[0.004, 0], [0.004, tv(1.016)]], thread, false);
+    seam(t, [[0.5, 0], [0.5, tv(1.016)]], thread, false);
+    seam(t, [[0.996, 0], [0.996, tv(1.016)]], thread, false);
+    seam(t, [[0.25, tv(1.016)], [0.25, 0]], null);
+    seam(t, [[0.75, tv(1.016)], [0.75, 0]], null);
+    /* slant pockets */
+    seam(t, [[0.612, tv(1.010)], [0.566, tv(0.905)]], thread, false);
+    seam(t, [[0.888, tv(1.010)], [0.934, tv(0.905)]], thread, false);
+    crease(t, [[0.60, tv(0.905)], [0.68, tv(0.890)], [0.74, tv(0.866)]], 0.6, 3);
+    crease(t, [[0.90, tv(0.905)], [0.82, tv(0.890)], [0.76, tv(0.866)]], 0.6, 3);
+    crease(t, [[0.12, tv(0.862)], [0.19, tv(0.848)], [0.245, tv(0.830)]], 0.7, 3);
+    crease(t, [[0.38, tv(0.862)], [0.31, tv(0.848)], [0.255, tv(0.830)]], 0.7, 3);
+
+    var lg = TILES.leg;
+    function lv(y) { return (y - 0.085) / (0.950 - 0.085); }
+    fillTile(lg, col, 0.88);
+    blotch(lg, 0.0, lv(0.84), 0.16, 0.12, [0, 0, 0], 0.30);
+    blotch(lg, 1.0, lv(0.84), 0.16, 0.12, [0, 0, 0], 0.30);
+    blotch(lg, 0.25, lv(0.50), 0.14, 0.05, [0, 0, 0], 0.16);
+    seam(lg, [[0.004, 0], [0.004, 1]], thread, false);
+    seam(lg, [[0.996, 0], [0.996, 1]], thread, false);
+    seam(lg, [[0.5, lv(0.128)], [0.5, 1]], thread, false);
+    if (stripe) {
+      band2(lg, 0.468, lv(0.128), 0.486, 1, css(stripe), 0.7, 6);
+      band2(lg, 0.514, lv(0.128), 0.532, 1, css(stripe), 0.7, 6);
+    }
+    /* soft cloth: a bagged knee, long easy folds, nothing sharp */
+    crease(lg, [[0.60, lv(0.560)], [0.75, lv(0.548)], [0.90, lv(0.560)]], 0.5, 3.5);
+    crease(lg, [[0.62, lv(0.455)], [0.75, lv(0.468)], [0.88, lv(0.455)]], 0.6, 3.5);
+    crease(lg, [[0.08, lv(0.530)], [0.25, lv(0.512)], [0.42, lv(0.530)]], 0.8, 3.5);
+    crease(lg, [[0.10, lv(0.490)], [0.25, lv(0.476)], [0.40, lv(0.490)]], 0.6, 3.5);
+    crease(lg, [[0.58, lv(0.84)], [0.74, lv(0.80)], [0.92, lv(0.82)]], 0.4, 3.5);
+    crease(lg, [[0.56, lv(0.70)], [0.70, lv(0.665)], [0.86, lv(0.68)]], 0.35, 3.5);
+    crease(lg, [[0.60, lv(0.33)], [0.76, lv(0.30)], [0.92, lv(0.32)]], 0.4, 3.5);
+    /* the leg stacking on its cuff */
+    for (i = 0; i < 3; i++) {
+      var yk = 0.142 + i * 0.030, ph = i * 0.21;
+      crease(lg, [[0.0, lv(yk)], [0.15 + ph * 0.2, lv(yk + 0.011)], [0.34, lv(yk - 0.004)], [0.53 + ph * 0.1, lv(yk + 0.012)],
+        [0.72, lv(yk - 0.003)], [0.88, lv(yk + 0.010)], [1.0, lv(yk)]], 1.1 - i * 0.2, 3.5);
+    }
+    /* the cuff: rib */
+    band2(lg, 0, 0, 1, lv(0.122), css(col, 1.10), 0.92, 6);
+    for (i = 0; i < 44; i++) {
+      u = (i + 0.5) / 44;
+      line(lg, [[u, 0.004], [u, lv(0.120)]], 'rgba(0,0,0,.24)', 1.2, -16, 1.8);
+    }
+    line(lg, [[0, lv(0.123)], [1, lv(0.123)]], 'rgba(0,0,0,.42)', 1.6, -30, 3);
   }
 
   function paintShoes() {
@@ -1948,12 +2579,15 @@
     }
     var PW2 = pc.width, PH2 = pc.height, g = PAINT.g;
     var id = g.getImageData(t.px, t.py, t.pw, t.ph), d = id.data, e2 = 2 / HEAD.n;
+    var cut0 = fin(F.cutBottom, bot), cut1 = fin(F.cutTop, top), soft = clamp(fin(F.soft, 0.014), 0.001, 0.05);
     for (var py = 0; py < t.ph; py++) {
       var v = 1 - (py - TILE_PAD) / (t.ph - 2 * TILE_PAD);
-      var hy = HEAD.y0 + v * (HEAD.y1 - HEAD.y0);
+      /* the tile is laid out in the table's heights; the picture is of the
+         person, so it is read at the height this row really sits at */
+      var hyC = HEAD.y0 + v * (HEAD.y1 - HEAD.y0), hy = headY(hyC);
       if (hy > top || hy < bot) continue;
-      var r = sampleRows(HEAD.rows, hy);
-      var my = band(hy, bot, bot + 0.014) * (1 - band(hy, top - 0.014, top));
+      var r = headRow(hyC);
+      var my = band(hy, cut0, cut0 + soft) * (1 - band(hy, cut1 - soft, cut1));
       if (my <= 0) continue;
       var fy = (top - hy) / (top - bot) * (PH2 - 1), y0 = Math.floor(fy), y1 = Math.min(PH2 - 1, y0 + 1), ty = fy - y0;
       for (var px = 0; px < t.pw; px++) {
@@ -1992,7 +2626,7 @@
     /* angle off dead ahead for a point `x` metres off the midline, at height hy */
     function ang(x, hy) {
       /* the exact inverse of the superellipse headPoint() lays the ring out on */
-      var r = sampleRows(HEAD.rows, hy), q = clamp(Math.abs(x) / r[1], 0, 1);
+      var r = headRow(hy), q = clamp(Math.abs(x) / r[1], 0, 1);
       return (x < 0 ? -1 : 1) * Math.asin(Math.pow(q, HEAD.n / 2));
     }
     void hk;
@@ -2042,11 +2676,19 @@
       for (var qy = 0; qy < t.ph; qy++) for (var qx = 0; qx < t.pw; qx++) {
         var u3 = (qx - TILE_PAD) / (t.pw - 2 * TILE_PAD), v3 = 1 - (qy - TILE_PAD) / (t.ph - 2 * TILE_PAD);
         var hy3 = HEAD.y0 + v3 * (HEAD.y1 - HEAD.y0), phi = (0.5 - u3) * TAU;
-        var e = band(hy3 - hairLine(phi), -0.012, 0.006);
+        var e, n3 = hash1(qx * 7.3 + qy * 113.1), stip = 1;
+        if (st === 'crop') {
+          /* across the forehead the roots are a line (and a photograph's own
+             fringe is left to show below it); round the sides and back the
+             hair is clipped down to nothing, so it fades out in stubble */
+          var dH = hairDist(phi, hy3), lf = cropSide(phi);
+          if (dH < -0.014) continue;
+          e = lerp(band(dH, -0.003, 0.010), band(dH, -0.010, 0.012), lf);
+          stip = lerp(1, lerp(0.30 + 0.70 * n3, 0.86 + 0.14 * n3, band(dH, -0.002, 0.012)), lf);
+        } else e = photo ? band(hy3 - hairLine(phi), -0.003, 0.010) : band(hy3 - hairLine(phi), -0.012, 0.006);
         if (e <= 0) continue;
-        var n3 = hash1(qx * 7.3 + qy * 113.1);
-        var k3 = clamp(e * (0.82 + 0.18 * n3) * (st === 'buzz' ? 0.80 : 1), 0, 1);
-        var o3 = (qy * t.pw + qx) * 4, sh = 0.86 + 0.28 * n3;
+        var k3 = clamp(e * stip * (0.82 + 0.18 * n3) * (st === 'buzz' ? 0.80 : 1), 0, 1);
+        var o3 = (qy * t.pw + qx) * 4, sh = st === 'crop' ? 0.66 + 0.24 * n3 : 0.86 + 0.28 * n3;
         d2[o3] = lerp(d2[o3], hair[0] * sh, k3); d2[o3 + 1] = lerp(d2[o3 + 1], hair[1] * sh, k3); d2[o3 + 2] = lerp(d2[o3 + 2], hair[2] * sh, k3);
         dr[o3] = dr[o3 + 1] = dr[o3 + 2] = lerp(dr[o3], 0.50 * 255, k3);
       }
@@ -2128,8 +2770,32 @@
 
   function paintHair() {
     var t = TILES.hair, hair = hexRGB((LOOK.hair && LOOK.hair.color) || '#241a13');
-    fillTile(t, hair, 0.50);
     var g = PAINT.g, gh = PAINT.gh;
+    if (LOOK.hair && LOOK.hair.style === 'crop') {
+      /* a tousled crop: matte, and no parting for the strands to agree on --
+         short locks lying every way, the light ones over the dark */
+      fillTile(t, [hair[0] * 0.80, hair[1] * 0.80, hair[2] * 0.80], 0.86);
+      g.save(); g.beginPath(); g.rect(t.px, t.py, t.pw, t.ph); g.clip();
+      gh.save(); gh.beginPath(); gh.rect(t.px, t.py, t.pw, t.ph); gh.clip();
+      g.lineCap = 'round'; gh.lineCap = 'round';
+      for (var c = 0; c < 1700; c++) {
+        var cx = t.px + hash1(c * 3.1) * t.pw, cy = t.py + hash1(c * 5.7) * t.ph, len = 7 + hash1(c * 9.3) * 19;
+        /* mostly the way it grows -- down the sheet, crown to hairline -- and never quite */
+        var an = PI / 2 + (hash1(c * 6.1) - 0.5) * 1.5, curl = (hash1(c * 4.3) - 0.5) * 1.1, kk = hash1(c * 1.7);
+        var ex = cx + Math.cos(an) * len, ey = cy + Math.sin(an) * len;
+        var mx = (cx + ex) / 2 - Math.sin(an) * len * curl * 0.5, my = (cy + ey) / 2 + Math.cos(an) * len * curl * 0.5;
+        var light = c > 700 && kk > 0.42;
+        g.strokeStyle = light ? css(hair, 1.15 + (kk - 0.42) * 1.25, 0.34) : css(hair, 0.42 + kk * 0.6, 0.40);
+        g.lineWidth = 1.1 + hash1(c * 2.9) * 1.7;
+        g.beginPath(); g.moveTo(cx, cy); g.quadraticCurveTo(mx, my, ex, ey); g.stroke();
+        gh.strokeStyle = grey(128 + (light ? 1 : -1) * (26 + kk * 40), 0.60);
+        gh.lineWidth = g.lineWidth + 0.8;
+        gh.beginPath(); gh.moveTo(cx, cy); gh.quadraticCurveTo(mx, my, ex, ey); gh.stroke();
+      }
+      g.restore(); gh.restore();
+      return;
+    }
+    fillTile(t, hair, 0.50);
     g.save(); g.beginPath(); g.rect(t.px, t.py, t.pw, t.ph); g.clip();
     gh.save(); gh.beginPath(); gh.rect(t.px, t.py, t.pw, t.ph); gh.clip();
     /* strands run crown -> hairline, i.e. down the tile */
@@ -2191,7 +2857,7 @@
 
     var ic = PAINT.g.getImageData(0, 0, ATLAS, ATLAS), ih = PAINT.gh.getImageData(0, 0, ATLAS, ATLAS);
     var jeans = (LOOK.bottom.type || 'jeans') === 'jeans';
-    var knit = T.type === 'hoodie' || T.type === 'tshirt';
+    var knit = T.type === 'hoodie' || T.type === 'tshirt' || T.type === 'sweater';
     grainTile(ic.data, ih.data, TILES.torso, 0.10, knit ? 3.0 : 4.5, knit ? 0.9 : 0.62, knit ? 0.0 : 0.62);
     grainTile(ic.data, ih.data, TILES.sleeve, 0.10, knit ? 3.0 : 4.5, knit ? 0.9 : 0.62, knit ? 0.0 : 0.62);
     grainTile(ic.data, ih.data, TILES.leg, jeans ? 0.16 : 0.09, jeans ? 6.5 : 3.5, 0.70, 0.70);
@@ -2201,6 +2867,7 @@
     grainTile(ic.data, ih.data, TILES.hair, 0.10, 0, 1, 1);
     grainTile(ic.data, ih.data, TILES.trim, 0.08, 3.0, 0.9, 0.0);
     grainTile(ic.data, ih.data, TILES.under, 0.05, 2.0, 0.9, 0.0);
+    if (T.crew) crewSkin(ic.data, ih.data);
     PAINT.g.putImageData(ic, 0, 0);
 
     /* height -> tangent-space normal. v runs UP the sheet (flipY), canvas y
@@ -2355,7 +3022,10 @@
     buildHair(pile);
     var geo = pileToGeometry(pile);
 
-    loadFace(repaintAtlas);       /* no-op without LOOK.face; calls back when the picture is in */
+    /* The picture is the LOCAL figure's. A figure built from a look without
+       one (a multiplayer puppet, section 11) must leave the loader alone, or
+       it would cancel a picture that is still arriving. */
+    if (LOOK.face && LOOK.face.image) loadFace(repaintAtlas);
     var tex = bakeAtlas();
     var mat = new THREE.MeshStandardMaterial({
       map: tex.map, normalMap: tex.normalMap, roughnessMap: tex.roughnessMap,
@@ -2423,7 +3093,10 @@
       root: root, mesh: mesh, mat: mat, tex: tex, bones: bones, skeleton: skeleton,
       gun: gun, guns: {}, cur: null, shadow: shadow, flash: flash,
       st: makeState(), muzzleW: new THREE.Vector3(), muzzleOK: false,
-      verts: pile.n, tris: pile.ix.length / 3
+      verts: pile.n, tris: pile.ix.length / 3,
+      /* this figure's own stature: the animator scales by it, and a puppet's
+         is not the local player's */
+      tall: heroTall()
     };
     buildGuns(HERO);
     initPose();
@@ -2779,7 +3452,7 @@
   }
 
   function animateHero(dt) {
-    var H = HERO, st = H.st, P = G.player, MU = G.M, W = G.WPN[P.weapon] || {};
+    var H = HERO, st = H.st, P = G.player, MU = G.M, HS = MU * fin(H.tall, 1), W = G.WPN[P.weapon] || {};
     var i, s;
     if (!LQ) LQ = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
     st.t += dt;
@@ -2796,7 +3469,7 @@
     }
     var yaw = P.yaw, sy = Math.sin(yaw), cy = Math.cos(yaw);
     /* body-space velocity, m/s: forward and to the right */
-    var vf = -(st.vx * sy + st.vz * cy) / MU, vr = (st.vx * cy - st.vz * sy) / MU;
+    var vf = -(st.vx * sy + st.vz * cy) / HS, vr = (st.vx * cy - st.vz * sy) / HS;
     var speed = Math.sqrt(vf * vf + vr * vr);
     st.speed = speed;
     var alive = !!P.alive;
@@ -2835,8 +3508,8 @@
     var Af = lerp(0.33, 0.27, runK) * (1 - 0.30 * crouchK) * (1 - 0.35 * sideK);
     var Ab = lerp(0.37, 0.50, runK) * (1 - 0.34 * crouchK) * (1 - 0.40 * sideK);
     var duty = clamp((Af + Ab) / Math.max(0.4, stride), 0.20, 0.64);
-    if (P.onGround && proneK < 0.5) st.phase += (movedU / MU) / Math.max(0.4, stride);
-    else if (proneK >= 0.5) st.phase += (movedU / MU) / 0.95;
+    if (P.onGround && proneK < 0.5) st.phase += (movedU / HS) / Math.max(0.4, stride);
+    else if (proneK >= 0.5) st.phase += (movedU / HS) / 0.95;
     if (st.phase > 4096) st.phase -= 4096;
     var ph = st.phase;
     var lift = lerp(0.055, 0.21, runK) * (1 + 0.45 * dashK) * (1 - 0.35 * crouchK);
@@ -2865,7 +3538,9 @@
     var breath = Math.sin(st.breath);
 
     /* aim pitch as the body sees it */
-    st.aimPitch = clamp(P.pitch + fin(P.recoilPitch) * 0.6, -1.35, 1.35);
+    /* the showcase (U): head level, gun lowered -- he is posing, not aiming */
+    st.showK = damp(fin(st.showK), clamp(fin(st.showT), 0, 1), 3e-3, dt);
+    st.aimPitch = clamp(P.pitch + fin(P.recoilPitch) * 0.6, -1.35, 1.35) * (1 - sstep(st.showK));
     var aimPitch = st.aimPitch;
 
     st.flinchP.step(dt); st.flinchR.step(dt);
@@ -2909,6 +3584,7 @@
     var lowT = 0;
     if (P.pending >= 0) lowT = 1 - clamp(fin(P.swapT) / Math.max(0.05, fin(P.swapDur, 0.22)), 0, 1);
     else if (fin(P.raiseT) > 0) lowT = clamp(P.raiseT / Math.max(0.05, fin(P.raiseDur, 0.22)), 0, 1);
+    lowT = Math.max(lowT, 0.92 * sstep(fin(st.showK)));
     st.lowK = damp(st.lowK, lowT, 1e-6, dt);
     var lowK = sstep(st.lowK);
     var carryDash = dashK * (1 - ads) * (1 - band(fin(P.cool), 0, 0.12) * 0);
@@ -2931,7 +3607,7 @@
     if (cam.aimOK && VIEW.blend > 0.5 && alive) {
       /* world -> root: translate, un-yaw, un-scale */
       var wx = cam.ax - P.x, wy = cam.ay - (P.y - fin(P.stepSm)), wz = cam.az - P.z;
-      var lx = (wx * cy - wz * sy) / MU, lz = (wx * sy + wz * cy) / MU, ly = wy / MU;
+      var lx = (wx * cy - wz * sy) / HS, lz = (wx * sy + wz * cy) / HS, ly = wy / HS;
       var ox = lx - C.ready[0], oy = ly - (eyeY + C.ready[1]), oz = lz;
       var hd = Math.sqrt(ox * ox + oz * oz);
       if (hd > 0.9 && oz < -0.3) {
@@ -3124,7 +3800,7 @@
     var footY = P.y - fin(P.stepSm);
     H.root.position.set(P.x, footY, P.z);
     H.root.rotation.set(0, yaw, 0);
-    H.root.scale.set(MU, MU, MU);
+    H.root.scale.set(HS, HS, HS);
     H.root.updateMatrixWorld(true);
 
     if (gun) {
@@ -3139,7 +3815,7 @@
       H.flash.visible = on;
       if (on) {
         var fs = (W.rocket ? 3.4 : W.pellets > 2 ? 2.5 : gun && gun.cls === 'pistol' ? 1.5 : 1.9) * (0.8 + 0.4 * st.flashSeed) * (P.suppressed && gun.can ? 0.35 : 1);
-        V.a.set(0, 0, -0.10).applyQuaternion(V.gunQ).applyQuaternion(H.root.quaternion).multiplyScalar(MU);
+        V.a.set(0, 0, -0.10).applyQuaternion(V.gunQ).applyQuaternion(H.root.quaternion).multiplyScalar(HS);
         H.flash.position.copy(H.muzzleW).add(V.a);
         H.flash.scale.set(fs, fs, 1);
         H.flash.material.rotation = st.flashSeed * TAU;
@@ -3150,6 +3826,7 @@
       var kS = G.shadowStrength ? fin(G.shadowStrength(0), 1) : 1;
       H.shadow.visible = H.root.visible && airK < 0.9;
       H.shadow.position.set(P.x + PW[hp].x * MU * 0, footY + 0.055, P.z);
+      H.shadow.scale.setScalar(HS / MU);
       H.shadow.material.opacity = 0.44 * kS * (1 - airK * 0.7);
     }
   }
@@ -3172,9 +3849,10 @@
       if (TI.scanT <= 0) { TI.scanT = (TI.queue.length || TI.cur) ? 0.25 : 1.5; tiScan(); }
       if (TI.queue.length || TI.cur) tiStep(ST.playing ? 9000 : 70000);
     }
+    showcaseStep(dt);
     updateBlend(dt);
     var H = HERO;
-    if (VIEW.blend <= 0.0005 && cam.t <= 0 && !DBG.orbit) {
+    if (VIEW.blend <= 0.0005 && cam.t <= 0 && !DBG.orbit && !SHOW.active) {
       /* first person, fully: nothing in this file runs past this line */
       if (H && H.root.visible) { H.root.visible = false; if (H.shadow) H.shadow.visible = false; if (H.flash) H.flash.visible = false; }
       cam.init = false;
@@ -3187,14 +3865,24 @@
     var simDt = (ST.playing || (!P.alive && ST.ended)) ? dt : 0;
 
     updateCamera(dt);
-    var show = VIEW.blend > 0.5 || !!DBG.orbit;
-    if (show && !DBG.orbit) {
+    var show = VIEW.blend > 0.5 || !!DBG.orbit || SHOW.active;
+    if (show && !DBG.orbit && SHOW.active) {
+      /* the showcase comes right up to his face on purpose: hide him only with
+         the lens actually inside his head (the first frames of a swing out of
+         first person) */
+      var cp = NZ.ctx.camera.position, ey = P.y - fin(P.stepSm) + fin(P.eyeH, G.EYE) * heroTall();
+      var sx = P.x - cp.x, sy = ey - cp.y, sz = P.z - cp.z, rr = 0.30 * G.M * heroTall();
+      if (sx * sx + sy * sy + sz * sz < rr * rr) show = false;
+    } else if (show && !DBG.orbit) {
       /* the lens pushed up against the back of his head: take him out rather
          than render the inside of a skull */
       var hx = P.x - cam.x, hy = (cam.pivotY) - cam.y, hz = P.z - cam.z;
       if (hx * hx + hy * hy + hz * hz < CAMT.fade * CAMT.fade) show = false;
     }
     H.root.visible = show;
+    /* on show: gun lowered, head level (read by the animator from H.st, so a
+       multiplayer puppet never inherits it) */
+    H.st.showT = SHOW.on ? 1 : 0;
     animateHero(simDt);
 
     /* Brass. The game throws a spent case from the eye with none of the
@@ -3214,7 +3902,7 @@
     }
 
     if (DBG.orbit) {
-      var o = DBG.orbit, c = NZ.ctx.camera, MU = G.M;
+      var o = DBG.orbit, c = NZ.ctx.camera, MU = heroScale();
       var a = P.yaw + o.az, ty = P.y - fin(P.stepSm) + fin(o.y, 1.0) * MU, d = o.dist * MU;
       /* az 0 puts the lens behind him, looking the way he looks */
       c.position.set(P.x + Math.sin(a) * Math.cos(o.el) * d, ty + Math.sin(o.el) * d, P.z + Math.cos(a) * Math.cos(o.el) * d);
@@ -3250,8 +3938,14 @@
     loadView();
     buildUI();
     bindKey();
+    wrapShowcase();
     NZ.log('hero built in ' + Math.round(t1 - t0) + 'ms: ' + HERO.verts + ' verts, ' + HERO.tris + ' tris, look=' + LOOK.name);
   }
+
+  /* The face picture starts loading now, while the rest of the game is still
+     booting, so that by the time the figure is built it is simply there: one
+     bake of the atlas instead of a bake, a wait and a second bake. */
+  try { if (LOOK.face && LOOK.face.image) loadFace(function () { if (HERO && !DEAD) repaintAtlas(); }); } catch (e) { }
 
   /* Registered after nz-weapons (script order), so its assets exist to be
      instanced; and before nz-render's late sweep at -1000, so the materials
@@ -3304,10 +3998,16 @@
 
   /* A puppet wears the game's default figure, never the local player's
      photo face (that would put your face on your friend), in a jacket of the
-     colour the match gave that player. */
+     colour the match gave that player. The default figure is the STOCK one:
+     a look file (nz-hero-look.js) dresses the local player only, so nothing
+     of it -- face, fitted head, haircut, stature -- is copied onto anyone
+     else. */
   function puppetLook(opts) {
-    var L = JSON.parse(JSON.stringify(LOOK));
+    var L = JSON.parse(JSON.stringify(LOOK_STOCK));
     L.face = null;
+    /* one thing is shared: the bone table, and with it where the shoulder
+       joints are. The trunk is cut to match them. */
+    L.build.shoulders = LOOK.build.shoulders;
     var o = opts && opts.look;
     if (o && typeof o === 'object') {
       for (var k in o) {
@@ -3394,7 +4094,7 @@
     var H = pup.H;
     if (!pup.posed || !H.root.visible) return out;
     if (!_hv) _hv = new THREE.Vector3();
-    var MU = G.M;
+    var MU = G.M * fin(H.tall, 1);
     for (var i = 0; i < HIT_SPEC.length; i++) {
       var s = HIT_SPEC[i], a = H.bones[bi(s[1])];
       if (!a) continue;
@@ -3496,6 +4196,16 @@
     look: LOOK,
     /* other players' figures, for nz-net.js (section 11) */
     puppet: PUPPET_API,
+    /* the U showcase, for a touch button or a test: NZ.hero.showcase.toggle() */
+    showcase: {
+      get on() { return SHOW.on; },
+      get active() { return SHOW.active; },
+      get swing() { return SHOW.k; },
+      toggle: function () { try { return SHOW.on ? showcaseOff() : showcaseOn(); } catch (e) { panic(e, 'showcase'); return false; } },
+      set: function (v) { try { return v ? showcaseOn() : showcaseOff(); } catch (e) { panic(e, 'showcase'); return false; } },
+      zoom: function (z) { if (SHOW.on) SHOW.zoomT = clamp(fin(z, SHOW.zoomT), 0, 1); return SHOW.zoomT; },
+      orbit: function (mx, my) { showcaseOrbit(mx, my); }
+    },
     view: VIEW,
     setThird: function (on) { setThird(on, false); },
     /* Re-dress the figure in place: NZ.hero.restyle({ top: { color: '#7a1f1f' } }) */
