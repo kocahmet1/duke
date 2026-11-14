@@ -12,6 +12,7 @@ appear, with the English meaning.
 |---|---|
 | **Left thumb** | A stick appears wherever your thumb lands on the left side. Light push walks (quiet steps), normal push runs, all the way up sprints (the ring says **KOŞU**). |
 | **Right thumb** | Drag anywhere on the right half to look around. |
+| **Double tap** (right half) | Fires. Keep the second tap pressed to keep firing, and drag it to aim. Tap-tap-tap fires on every tap after the first. A single tap does nothing, and double taps on the stick side don't fire, so re-gripping never shoots. |
 | **Big round crosshair button** (fire) | Hold to shoot. Drag it to aim while you're shooting. |
 | **NİŞAN** (aim) | Tap for sights / scope, tap again to stop. Sprinting drops it. On the SIFIRYILDIZ it says **PATLAT** and collapses the cores. |
 | **Up arrows** (jump) | Jump. While crawling it stands you up. |

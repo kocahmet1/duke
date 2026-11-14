@@ -1274,7 +1274,7 @@ başlık ekranından seç.</p>
     '<span class="keyhint">&#10074;&#10074;</span> pause and settings<br><br>';
 @@NEW
     '<span class="keyhint">SOL BAŞPARMAK</span> hareket (hızlı koşmak için sonuna kadar it) &nbsp;&bull;&nbsp; ' +
-    '<span class="keyhint">SAĞ BAŞPARMAK</span> sürükleyerek bak<br>' +
+    '<span class="keyhint">SAĞ BAŞPARMAK</span> sürükleyerek bak, çift dokunarak ateş et<br>' +
     '<span class="keyhint">ATEŞ</span> ateş et &mdash; ateş ederken sürükleyip nişan al &nbsp;&bull;&nbsp; ' +
     '<span class="keyhint">NİŞAN</span> nişangâh / dürbün' +
     '<span class="nzt-sp"> &nbsp;&bull;&nbsp; <span class="keyhint">KULLAN</span> kapılar, asansörler, şalterler</span><br>' +

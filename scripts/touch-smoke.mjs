@@ -6,7 +6,7 @@
      1. as a PHONE (Chrome's phone emulation: touch, mobile viewport, 2x
         screen) on mission 2, and drives every control with real touch
         events: the stick (walk, run, sprint), look, both thumbs at once,
-        FIRE (tap, hold, drag to aim), AIM, JUMP, CROUCH (tap and hold),
+        FIRE (tap, hold, drag to aim), double tap to fire, AIM, JUMP, CROUCH (tap and hold),
         WEAPON (tap and the list), MAP, the pause-screen settings, RESUME, and
         the portrait pause. It also checks the phone set-up: controls on, no
         canvas MSAA, the pixel-ratio cap, the street assets skipped.
@@ -149,7 +149,8 @@ const ph = await open(phoneErrs, p => p.emulate({
 await ph.goto(`http://127.0.0.1:${PORT}/NUKEM.html#skill=0&level=2&fresh=1`, { waitUntil: 'domcontentloaded', timeout: 180000 });
 await waitFor(ph, () => state.booted, 300000, 'phone boot');
 say('phone booted');
-const F = fingers(await ph.createCDPSession());
+const cdpPh = await ph.createCDPSession();
+const F = fingers(cdpPh);
 
 const t = await ev(ph, () => ({
   st: NZ.touch.state(), aa: _refs().renderer.getContext().getContextAttributes().antialias, pr: _refs().renderer.getPixelRatio(),
@@ -227,6 +228,26 @@ let a0 = await ev(ph, () => player.ammo.clip);
 await F.tap(B.fire, 150);
 await sleep(800);
 check(await ev(ph, () => player.ammo.clip) === a0 - 1, 'tap FIRE: one pistol shot');
+
+/* a double tap on the look side fires, a single tap does not. The touches
+   carry their own timestamps: each protocol call waits for the page, so
+   behind a slow frame two awaited taps would land seconds apart */
+const pageNow = () => ev(ph, () => performance.timeOrigin + performance.now());
+const stamped = (type, x, y, tMs) => cdpPh.send('Input.dispatchTouchEvent', {
+  type, timestamp: tMs / 1000, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 42, radiusX: 6, radiusY: 6, force: 1 }]
+});
+const tapAt = (x, y, tMs) => Promise.all([stamped('touchStart', x, y, tMs), stamped('touchEnd', 0, 0, tMs + 45)]);
+await gunUp(ph, 0);
+a0 = await ev(ph, () => player.ammo.clip);
+let tt = await pageNow();
+await tapAt(620, 190, tt);
+await sleep(1500);
+const single = await ev(ph, () => player.ammo.clip);
+tt = await pageNow();
+await tapAt(620, 190, tt);
+await tapAt(640, 180, tt + 160);
+await until(ph, `player.ammo.clip < ${single}`, 'double tap');
+check(single === a0 && await ev(ph, () => player.ammo.clip) === a0 - 1, 'a single tap does nothing, a double tap fires one shot');
 await ev(ph, () => selectWeapon(2));
 await gunUp(ph, 2);
 a0 = await ev(ph, () => ({ am: player.ammo.chain, yaw: player.yaw }));

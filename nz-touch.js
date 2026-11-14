@@ -12,7 +12,8 @@
      RIGHT THUMB   drag anywhere on the right to look. FIRE is held like a
                    trigger and can be dragged as well, so the thumb that
                    shoots also aims -- the one thing every phone shooter
-                   learned the hard way.
+                   learned the hard way. A double tap on the right fires
+                   too: the second tap holds the trigger while it stays down.
      BUTTONS       AIM toggles the sights / scope (SNAP on the NULLSTAR),
                    JUMP, CROUCH (tap; hold = crawl), USE, WEAPON (tap = next
                    gun; hold = the list), MAP, PAUSE. SUP and MED appear only
@@ -75,6 +76,10 @@
   var SPRINT_COS = 0.77;     /* ... and within 40 degrees of straight up sprints    */
   var LOOK_RAD = 0.0075;     /* look speed 1.0: radians of turn per CSS px dragged  */
   var HOLD_MS = 380;         /* long press on CROUCH and WEAPON                    */
+  var TAP_MS = 250;          /* double tap: each tap at most this long ...         */
+  var TAP_SLOP = 18;         /* ... and moving at most this far (px, |dx|+|dy|)    */
+  var DOUBLE_MS = 330;       /* the second touch this soon after the first tap ... */
+  var DOUBLE_DIST = 90;      /* ... and this close to it (px, |dx|+|dy|)          */
   var SENS_STEPS = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5, 3];
   /* GRAPHICS = a render tier (nz-render.js) plus a pixel-ratio ceiling. A
      phone screen is 3x and its GPU is not: the ceiling is most of the frame
@@ -398,7 +403,7 @@
 
   var TOUCH_HINT =
     '<span class="keyhint">SOL BAŞPARMAK</span> hareket (hızlı koşmak için sonuna kadar it) &nbsp;&bull;&nbsp; ' +
-    '<span class="keyhint">SAĞ BAŞPARMAK</span> sürükleyerek bak<br>' +
+    '<span class="keyhint">SAĞ BAŞPARMAK</span> sürükleyerek bak, çift dokunarak ateş et<br>' +
     '<span class="keyhint">ATEŞ</span> ateş et &mdash; ateş ederken sürükleyip nişan al &nbsp;&bull;&nbsp; ' +
     '<span class="keyhint">NİŞAN</span> nişangâh / dürbün' +
     '<span class="nzt-sp"> &nbsp;&bull;&nbsp; <span class="keyhint">KULLAN</span> kapılar, asansörler, şalterler</span><br>' +
@@ -495,7 +500,7 @@
   /* ============================================================== THE STICK */
   var TT = {};                 /* touch identifier (string) -> what that finger is doing */
   var stick = { id: null, cx: 0, cy: 0, R: 58, sprint: false };
-  var lookId = null, fireN = 0, pickOpen = false;
+  var lookId = null, fireN = 0, pickOpen = false, lastTap = null;
 
   function setStickPos(x, y) { stickEl.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,0)'; }
   function setKnob(x, y) { knobEl.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,0)'; }
@@ -576,6 +581,44 @@
     }
   }
 
+  /* The trigger. FIRE and a double tap both hold it; it lets go when the
+     last finger holding it lifts. */
+  function triggerDown() {
+    fireN++;
+    setFire(true, true);
+    if (B.fire) B.fire.classList.add('down');
+  }
+  function triggerUp() {
+    fireN = Math.max(0, fireN - 1);
+    if (!fireN) setFire(false);
+    if (B.fire) B.fire.classList.toggle('down', fireN > 0);
+  }
+
+  /* DOUBLE TAP FIRES. A quick tap on the look side, then a second touch near
+     it soon after: the second touch holds the trigger for as long as it stays
+     down, and still looks while it moves, so tap-then-press-and-drag shoots
+     and aims the way FIRE does. Taps chain: tap-tap-tap fires on every tap
+     after the first. A lone tap does nothing, so re-gripping the look thumb
+     never shoots, and the stick side is left out because thumbs re-grip the
+     stick all the time. The times are the touch events' own, so a quick
+     double tap stays one even when a slow frame delays its handling. */
+  function evTime(e) { return (e && e.timeStamp > 0) ? e.timeStamp : now(); }
+  function startLook(id, x, y, ts) {
+    var fires = !!(lastTap && ts >= lastTap.t && ts - lastTap.t <= DOUBLE_MS &&
+      Math.abs(x - lastTap.x) + Math.abs(y - lastTap.y) <= DOUBLE_DIST);
+    lastTap = null;
+    /* with another finger already looking, this one can still shoot */
+    var s = { kind: lookId === null ? 'look' : 'tap', x: x, y: y, sx: x, sy: y, t0: ts, far: 0, fires: fires };
+    if (s.kind === 'look') lookId = id;
+    TT[id] = s;
+    if (fires) triggerDown();
+  }
+  function endLook(id, s, cancelled, ts) {
+    if (s.kind === 'look' && lookId === id) lookId = null;
+    if (s.fires) triggerUp();
+    if (!cancelled && ts !== undefined && ts - s.t0 <= TAP_MS && s.far <= TAP_SLOP) lastTap = { t: ts, x: s.sx, y: s.sy };
+  }
+
   /* ============================================================= BUTTONS */
   function pressButton(id, x, y, b) {
     var act = b.getAttribute('data-act');
@@ -585,7 +628,7 @@
     var p = G.player;
     switch (act) {
       case 'fire':
-        s.looks = true; fireN++; setFire(true, true);
+        s.looks = true; triggerDown();
         break;
       case 'aim':
         s.looks = true;
@@ -639,10 +682,7 @@
     s.el.classList.remove('down');
     if (s.timer) { clearTimeout(s.timer); s.timer = 0; }
     switch (s.act) {
-      case 'fire':
-        fireN = Math.max(0, fireN - 1);
-        if (!fireN) setFire(false);
-        break;
+      case 'fire': triggerUp(); break;
       case 'jump': keySet('Space', false); break;
       case 'crouch':
         if (s.held || s.moved || cancelled) break;
@@ -711,6 +751,7 @@
     wakeAudio();
     if (!G) return;
     sweep(e.touches);
+    var ts = evTime(e);
     for (var i = 0; i < e.changedTouches.length; i++) {
       var t = e.changedTouches[i], id = String(t.identifier);
       if (TT[id]) endTouch(id, true);
@@ -720,7 +761,7 @@
       if (!playingNow()) { TT[id] = { kind: 'none' }; continue; }
       if (b) pressButton(id, t.clientX, t.clientY, b);
       else if (t.clientX < VW * STICK_ZONE && stick.id === null) startStick(id, t.clientX, t.clientY);
-      else if (t.clientX >= VW * STICK_ZONE && lookId === null) { lookId = id; TT[id] = { kind: 'look', x: t.clientX, y: t.clientY }; }
+      else if (t.clientX >= VW * STICK_ZONE) startLook(id, t.clientX, t.clientY, ts);
       else TT[id] = { kind: 'none' };
     }
   }
@@ -732,8 +773,11 @@
       var x = t.clientX, y = t.clientY, dx = x - s.x, dy = y - s.y;
       s.x = x; s.y = y;
       if (s.kind === 'stick') moveStick(x, y);
-      else if (s.kind === 'look') look(dx, dy);
-      else if (s.kind === 'btn') {
+      else if (s.kind === 'look' || s.kind === 'tap') {
+        if (s.kind === 'look') look(dx, dy);
+        var far = Math.abs(x - s.sx) + Math.abs(y - s.sy);
+        if (far > s.far) s.far = far;
+      } else if (s.kind === 'btn') {
         if (s.looks) look(dx, dy);
         if (!s.moved && Math.abs(x - s.sx) + Math.abs(y - s.sy) > 22) s.moved = true;
       }
@@ -741,18 +785,18 @@
   }
   function onEnd(e) {
     if (e.cancelable) e.preventDefault();
-    var cancelled = e.type === 'touchcancel';
+    var cancelled = e.type === 'touchcancel', ts = evTime(e);
     for (var i = 0; i < e.changedTouches.length; i++) {
       var t = e.changedTouches[i];
-      endTouch(String(t.identifier), cancelled, t.clientX, t.clientY);
+      endTouch(String(t.identifier), cancelled, t.clientX, t.clientY, ts);
     }
   }
-  function endTouch(id, cancelled, x, y) {
+  function endTouch(id, cancelled, x, y, ts) {
     var s = TT[id];
     if (!s) return;
     delete TT[id];
     if (s.kind === 'stick') { if (stick.id === id) endStick(); }
-    else if (s.kind === 'look') { if (lookId === id) lookId = null; }
+    else if (s.kind === 'look' || s.kind === 'tap') endLook(id, s, cancelled, ts);
     else if (s.kind === 'btn') releaseButton(s, cancelled, x, y);
   }
   /* A finger the browser forgot to report lifting (a system gesture, an
@@ -771,7 +815,9 @@
     TT = {};
     if (stick.id !== null) endStick();
     lookId = null;
+    lastTap = null;
     if (fireN) { fireN = 0; setFire(false); }
+    if (B.fire) B.fire.classList.remove('down');
     keySet('Space', false);
     closePicker();
   }
