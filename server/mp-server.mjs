@@ -43,7 +43,7 @@ const MAX_PLAYERS = Math.max(2, Math.min(8, parseInt(process.env.NZ_MAX_PLAYERS 
 /* Must equal NET.PROTO in nz-net.js. Bump both when the wire format changes,
    so a browser holding an old copy of the page is told to refresh instead of
    joining a match it cannot understand. */
-const PROTO = 1;
+const PROTO = 2;
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
@@ -200,8 +200,12 @@ async function iceServers() {
 }
 
 /* =============================================================== rooms == */
-/* code -> { code, level, peers: Map(id -> P), order: [id], created } */
+/* code -> { code, level, mode, peers: Map(id -> P), order: [id], created }
+   mode is 'team' (sides, rounds, bots in the empty seats) or 'dm' (the
+   free-for-all); the first browser in decides and the rest are told. The
+   match itself runs in the browsers -- this process never sees it. */
 const ROOMS = new Map();
+let LAST_JOIN = 0;      /* join stamps strictly increase: the browsers use them to agree who runs a team match */
 const ROOM_RE = /^[A-Z0-9]{4,8}$/;
 const ID_RE = /^[a-z0-9]{6,16}$/;
 const COLORS = 8;
@@ -240,12 +244,13 @@ async function join(ws, m) {
   const code = String(m.room || '').toUpperCase();
   if (!ROOM_RE.test(code)) { send(ws, { t: 'error', code: 'room', msg: 'Bu oda kodu geçersiz.' }); return; }
   const level = Math.max(1, Math.min(4, parseInt(m.level, 10) || 2));
+  const mode = m.mode === 'dm' ? 'dm' : 'team';
   let R = ROOMS.get(code);
   if (!R) {
     if (ROOMS.size >= 500) { send(ws, { t: 'error', code: 'busy', msg: 'Sunucu dolu. Daha sonra tekrar dene.' }); return; }
-    R = { code, level, peers: new Map(), order: [], host: null, created: Date.now() };
+    R = { code, level, mode, peers: new Map(), order: [], host: null, created: Date.now() };
     ROOMS.set(code, R);
-    log(`room ${code} opened (mission ${level})`);
+    log(`room ${code} opened (mission ${level}, ${mode})`);
   }
   if (R.level !== level) { send(ws, { t: 'error', code: 'level', level: R.level, msg: `Bu maç ${R.level}. görevde oynanıyor.` }); return; }
   /* a browser re-joining after a dropped socket keeps its id, so its direct
@@ -260,13 +265,14 @@ async function join(ws, m) {
   if (R.peers.size >= MAX_PLAYERS) { send(ws, { t: 'error', code: 'full', msg: `Bu maç dolu (${MAX_PLAYERS} oyuncu).` }); return; }
   const used = new Set([...R.peers.values()].map(p => p.color));
   let color = 0; while (used.has(color) && color < COLORS - 1) color++;
-  const P = { id, name: cleanName(m.name), ws, color, joined: Date.now() };
+  LAST_JOIN = Math.max(Date.now(), LAST_JOIN + 1);
+  const P = { id, name: cleanName(m.name), ws, color, joined: LAST_JOIN };
   const existing = [...R.peers.values()].map(p => ({ id: p.id, name: p.name, color: p.color }));
   R.peers.set(id, P); R.order.push(id);
   if (!R.host || !R.peers.has(R.host)) R.host = id;
   ws.nz.room = code; ws.nz.id = id;
   const ice = await iceServers();
-  send(ws, { t: 'welcome', id, room: code, level: R.level, host: R.host, color, max: MAX_PLAYERS, peers: existing, ice });
+  send(ws, { t: 'welcome', id, room: code, level: R.level, mode: R.mode, j: P.joined, host: R.host, color, max: MAX_PLAYERS, peers: existing, ice });
   for (const Q of R.peers.values()) if (Q.id !== id) send(Q.ws, { t: 'peer-joined', id, name: P.name, color });
   log(`room ${code}: ${P.name} joined (${R.peers.size}/${MAX_PLAYERS})`);
 }

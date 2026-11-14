@@ -17,6 +17,7 @@
     "check:car-glass": "node scripts/verify-car-glass.mjs",
     "check:save": "node scripts/verify-save.mjs",
     "check:mp": "node scripts/mp-smoke.mjs",
+    "check:team": "node scripts/team-smoke.mjs",
     "check:touch": "node scripts/touch-smoke.mjs"
   },
   "type": "module",

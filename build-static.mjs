@@ -80,6 +80,7 @@ const MODULES = [
   "nz-destruct.js",
   "demo.js",
   "nz-touch.js",
+  "nz-bots.js",
   "nz-net.js",
 ];
 

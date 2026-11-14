@@ -11876,7 +11876,12 @@ if (window.NZ_STREET_ASSETS) document.write(decodeURIComponent('%3Cscript%20src%
      page is touched or is opened on a touch-first device. -->
 <script src="nz-touch.js"></script>
 
-<!-- Multiplayer deathmatch (browser to browser, see MULTIPLAYER.md). Last on
+<!-- The bots of a multiplayer team match (see MULTIPLAYER.md): the brain only.
+     nz-net.js decides when a bot exists, draws it and sends it to the other
+     players. Outside a team match nothing in this file runs. -->
+<script src="nz-bots.js"></script>
+
+<!-- Multiplayer (browser to browser, see MULTIPLAYER.md). Last on
      purpose: it wraps game functions, so every module must have loaded first.
      Without #mp=ROOM in the address it only adds a MULTIPLAYER button. -->
 <script src="nz-net.js"></script>

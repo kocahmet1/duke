@@ -1,5 +1,7 @@
 /* ===========================================================================
-   mp-smoke.mjs -- multiplayer end-to-end check, headless.
+   mp-smoke.mjs -- multiplayer end-to-end check, headless: the free-for-all
+   deathmatch (&mode=dm). The team match with bots has its own check,
+   scripts/team-smoke.mjs.
 
    Starts server/mp-server.mjs on a spare port, opens N real game pages in
    separate browser profiles, joins them to one room and checks, in order:
@@ -32,6 +34,8 @@ const argv = process.argv.slice(2);
 const N = Math.max(2, Math.min(4, parseInt(argv[argv.indexOf('--players') + 1], 10) || 2));
 const PORT = 4300 + Math.floor(Math.random() * 500);
 const ROOM = 'T' + Math.random().toString(36).slice(2, 7).toUpperCase().replace(/[^A-Z0-9]/g, 'Q');
+/* the wire version the server will accept, read from the server itself */
+const PROTO = +(/const PROTO = (\d+);/.exec(fs.readFileSync(path.join(REPO, 'server', 'mp-server.mjs'), 'utf8')) || [0, 1])[1];
 const CHROME = process.env.CHROME || [
   '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
   '/tmp/chs/chrome-headless-shell-linux64/chrome-headless-shell',
@@ -81,7 +85,7 @@ const browser = await puppeteer.launch({
 
 const pages = [], errors = [];
 try {
-  const url = `http://127.0.0.1:${PORT}/NUKEM.html?nzq=low#mp=${ROOM}&level=2`;
+  const url = `http://127.0.0.1:${PORT}/NUKEM.html?nzq=low#mp=${ROOM}&level=2&mode=dm`;
   /* slow software rendering: give a crowded machine proportionally longer */
   const SLOW = N / 2;
   for (let i = 0; i < N; i++) {
@@ -111,7 +115,8 @@ try {
     start: document.getElementById('btnStart').textContent,
     title: document.querySelector('#scTitle h2').textContent
   }));
-  check(lobby.link && lobby.link.includes('#mp=' + ROOM) && lobby.start === 'MAÇA KATIL', `lobby UI (${lobby.title} / ${lobby.start})`);
+  check(lobby.link && lobby.link.includes('#mp=' + ROOM) && lobby.link.includes('mode=dm') && lobby.start === 'MAÇA KATIL', `lobby UI (${lobby.title} / ${lobby.start})`);
+  check(await pages[0].evaluate(() => NZ.net.mode() === 'dm' && NZ.net.round().ph === 'wait'), 'the room is a deathmatch: no rounds, no bots');
 
   /* everyone presses JOIN MATCH */
   for (const p of pages) await p.evaluate(() => { document.getElementById('btnStart').click(); });
@@ -200,6 +205,14 @@ try {
   await waitFor(pages[1], `player.alive && NZ.net.me().life !== ${before.life}`, 8000 * SLOW, 'B respawns');
   const resp = await pages[1].evaluate(() => ({ hp: player.hp, x: player.x, z: player.z, has: player.has.slice() }));
   check(resp.hp === 100, `B respawned with full health at (${resp.x.toFixed(1)}, ${resp.z.toFixed(1)})`);
+  /* ESC opens the pause menu in a match and closes it again (it used to throw) */
+  const pz = await pages[0].evaluate(() => {
+    togglePause();
+    const shown = document.getElementById('scPause').classList.contains('show');
+    togglePause();
+    return shown && state.playing && !document.getElementById('scPause').classList.contains('show');
+  });
+  check(pz, 'ESC opens and closes the pause menu in a match');
 
   /* 5. the server turns away a stale protocol and a full room */
   const probe = (msg) => new Promise(res => {
@@ -211,9 +224,9 @@ try {
   });
   const v = await probe({ t: 'join', room: ROOM, proto: 999, name: 'old', level: 2 });
   check(v && v.t === 'error' && v.code === 'version', `stale page refused (${v && v.code})`);
-  const f = await probe({ t: 'join', room: ROOM, proto: 1, name: 'extra', level: 2 });
+  const f = await probe({ t: 'join', room: ROOM, proto: PROTO, name: 'extra', level: 2 });
   check(f && f.t === 'error' && f.code === 'full', `full room refused (${f && f.code})`);
-  const l = await probe({ t: 'join', room: ROOM, proto: 1, name: 'lost', level: 4 });
+  const l = await probe({ t: 'join', room: ROOM, proto: PROTO, name: 'lost', level: 4 });
   check(l && l.t === 'error' && l.code === 'level' && l.level === 2, `wrong mission redirected to ${l && l.level}`);
 
   /* 6. leaving */
@@ -225,6 +238,7 @@ try {
   say(`  HUD on A: ${hudTxt}`);
   const st = await pages[0].evaluate(() => NZ.net.status());
   check(st.errors === 0, `no multiplayer errors (${st.errors})`);
+  check(await pages[0].evaluate(() => NZ.net.bots().length === 0), 'no bots in a deathmatch');
 } catch (err) {
   failures++;
   say('FAIL', err.message);
