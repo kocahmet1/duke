@@ -34,6 +34,10 @@
 
    Reads from NUKEM.html by name: NAV, liftOf, WPN, CELL, MW, MH, CLIMB,
    PRAD, GRAV, EYE, moveSlide, highestFloor, shotLineClear.
+
+   A map that is a fenced corner of a mission (ABLUKA) hands its arena in
+   through NZ.bots.setAllow(fn): fn(cell index) is true for a cell in play,
+   and no path, short cut or standing spot leaves those cells.
    ======================================================================== */
 (function (global) {
   'use strict';
@@ -80,6 +84,9 @@
   B.ready = function () { return world(); };
 
   /* ------------------------------------------------------------- cells -- */
+  /* the cells a match is played in, or null for the whole level */
+  var ALLOW = null;
+  function allowed(i) { return !ALLOW || ALLOW(i) === true; }
   function cellOf(x, z) {
     var cx = Math.floor(x / CELL), cy = Math.floor(z / CELL);
     return (cx < 0 || cy < 0 || cx >= MW || cy >= MH) ? -1 : cy * MW + cx;
@@ -89,13 +96,13 @@
   /* the walkable cell a body at x,z (feet at y) counts as standing in */
   function walkCell(x, z, y) {
     var c = cellOf(x, z);
-    if (c >= 0 && NAV.walk[c] && Math.abs(NAV.fl[c] - y) <= CLIMB * 2.6) return c;
+    if (c >= 0 && NAV.walk[c] && allowed(c) && Math.abs(NAV.fl[c] - y) <= CLIMB * 2.6) return c;
     var cx = Math.floor(x / CELL), cy = Math.floor(z / CELL), best = -1, bs = 1e9;
     for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) {
       var nx = cx + dx, ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) continue;
       var i = ny * MW + nx;
-      if (!NAV.walk[i]) continue;
+      if (!NAV.walk[i] || !allowed(i)) continue;
       var s = Math.hypot(wx(i) - x, wz(i) - z) + Math.abs(NAV.fl[i] - y) * 1.5;
       if (s < bs) { bs = s; best = i; }
     }
@@ -108,7 +115,7 @@
   }
   function standable(x, z, y) {
     var c = cellOf(x, z);
-    return c >= 0 && NAV.walk[c] === 1 && liftOf[c] < 0 && Math.abs(NAV.fl[c] - y) <= CLIMB;
+    return c >= 0 && NAV.walk[c] === 1 && allowed(c) && liftOf[c] < 0 && Math.abs(NAV.fl[c] - y) <= CLIMB;
   }
 
   /* ------------------------------------------------------------- paths -- */
@@ -125,7 +132,7 @@
       var c = QUEUE[head++], o = c * 8, dc = d[c] + 1;
       for (var k = 0; k < 8; k++) {
         var n = adj[o + k];
-        if (n < 0 || d[n] >= 0 || !linkOK(c, n)) continue;
+        if (n < 0 || d[n] >= 0 || !linkOK(c, n) || !allowed(n)) continue;
         d[n] = dc; QUEUE[tail++] = n;
       }
     }
@@ -165,9 +172,9 @@
     var sx = dx / steps, sz = dz / steps, px = -dz / dist, pz = dx / dist, fy = y;
     for (var i = 1; i <= steps; i++) {
       var qx = x0 + sx * i, qz = z0 + sz * i, c = cellOf(qx, qz);
-      if (c < 0 || !NAV.walk[c] || liftOf[c] >= 0 || Math.abs(NAV.fl[c] - fy) > CLIMB) return false;
+      if (c < 0 || !NAV.walk[c] || !allowed(c) || liftOf[c] >= 0 || Math.abs(NAV.fl[c] - fy) > CLIMB) return false;
       var l = cellOf(qx + px, qz + pz), r = cellOf(qx - px, qz - pz);
-      if (l < 0 || r < 0 || !NAV.walk[l] || !NAV.walk[r]) return false;
+      if (l < 0 || r < 0 || !NAV.walk[l] || !NAV.walk[r] || !allowed(l) || !allowed(r)) return false;
       if (Math.abs(NAV.fl[l] - NAV.fl[c]) > CLIMB || Math.abs(NAV.fl[r] - NAV.fl[c]) > CLIMB) return false;
       fy = NAV.fl[c];
     }
@@ -221,6 +228,12 @@
 
   /* how many steps of walking apart two spots are, -1 if you cannot walk it
      (nz-net.js uses this to put the two sides far from each other) */
+  /* the arena (see the header); every cached path is forgotten with it */
+  B.setAllow = function (fn) {
+    ALLOW = typeof fn === 'function' ? fn : null;
+    FIELDS.length = 0;
+  };
+
   B.pathSteps = function (ax, az, ay, bx, bz, by) {
     if (!world()) return -1;
     var a = walkCell(ax, az, ay), b = walkCell(bx, bz, by);

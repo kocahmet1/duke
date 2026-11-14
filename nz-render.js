@@ -178,6 +178,11 @@
   var tier = 'high';
   var tierPinned = false;
   var degrade = 0;                 /* 0..5, applied on top of the tier */
+  /* An outside multiplier on the scene resolution, for a caller that knows
+     the frame is fill-bound when the ladder above cannot tell: nz-net.js
+     lowers it in a match when frames stay slow. 1 = untouched. It survives
+     setQuality() and composes with the tier's own scale and degrade 5. */
+  var scaleMul = 1;
   var EFF = null;                  /* resolved effect set */
 
   /* live-tweakable look parameters. Deliberately restrained: if a viewer can
@@ -904,7 +909,7 @@
        or depth format cannot multisample, so this line is the whole gate */
     e.msaa = Math.min(e.msaa | 0, caps.msaa | 0);
     e.shadow = Math.min(e.shadow, caps.maxTex);
-    e.scale = Math.max(0.5, Math.min(1, e.scale));
+    e.scale = Math.max(0.5, Math.min(1, e.scale * scaleMul));
     return e;
   }
 
@@ -4239,6 +4244,16 @@
           applyEffects();
           applyLighting(!!envRT);
         },
+        /* scene resolution multiplier (0.4..1, see scaleMul); returns the
+           scale the scene now renders at */
+        setScale: function (m) {
+          if (dead) return EFF ? EFF.scale : 1;
+          m = +m;
+          scaleMul = (m > 0) ? Math.max(0.4, Math.min(1, m)) : 1;
+          applyEffects();
+          return EFF ? EFF.scale : 1;
+        },
+        get scaleMul() { return scaleMul; },
         setTonemap: function (name) {
           if (dead) return;
           if (name !== 'agx' && name !== 'aces' && name !== 'neutral') return;
@@ -4274,7 +4289,9 @@
         diag: function () { diagDone = false; emitDiag(); return selfCheck(); },
         get stats() {
           return { ms: medianFrame(), quality: tier, degrade: degrade, locked: adaptLocked,
-                   width: rtW, height: rtH, msaa: EFF ? EFF.msaa : 0, gbuf: gW + 'x' + gH,
+                   pinned: tierPinned && degrade === 0,
+                   width: rtW, height: rtH, scale: EFF ? EFF.scale : 1, scaleMul: scaleMul,
+                   msaa: EFF ? EFF.msaa : 0, gbuf: gW + 'x' + gH,
                    patch: caps.shaderPatch, gpu: timing ? timing.gpu : null };
         },
         rebuildEnvironment: function () {

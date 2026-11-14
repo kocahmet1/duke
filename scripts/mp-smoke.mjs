@@ -1,7 +1,8 @@
 /* ===========================================================================
    mp-smoke.mjs -- multiplayer end-to-end check, headless: the free-for-all
-   deathmatch (&mode=dm). The team match with bots has its own check,
-   scripts/team-smoke.mjs.
+   deathmatch (&mode=dm), on ER MEYDANI or, with --level 4, on ABLUKA. The
+   team match with bots has its own check, scripts/team-smoke.mjs (which
+   also takes --level 4).
 
    Starts server/mp-server.mjs on a spare port, opens N real game pages in
    separate browser profiles, joins them to one room and checks, in order:
@@ -15,8 +16,14 @@
      6. a page that leaves disappears from the others
    and fails on any console error from the game.
 
-     node scripts/mp-smoke.mjs                 2 players
+   With --level 4 the room plays ABLUKA, the fenced corner of Mission 4, and
+   it also checks that every spawn point is inside the arena, that a facade
+   pane and a crate shot on A break the same way on B, and that a player who
+   joins afterwards is handed the same damage.
+
+     node scripts/mp-smoke.mjs                 2 players, ER MEYDANI
      node scripts/mp-smoke.mjs --players 3     3 players
+     node scripts/mp-smoke.mjs --level 4       2 players, ABLUKA
      CHROME=/path/to/chrome node scripts/mp-smoke.mjs
 
    Software rendering (SwiftShader) is slow: allow a minute or two.
@@ -32,6 +39,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
 const argv = process.argv.slice(2);
 const N = Math.max(2, Math.min(4, parseInt(argv[argv.indexOf('--players') + 1], 10) || 2));
+const LEVEL = argv.includes('--level') && parseInt(argv[argv.indexOf('--level') + 1], 10) === 4 ? 4 : 2;
 const PORT = 4300 + Math.floor(Math.random() * 500);
 const ROOM = 'T' + Math.random().toString(36).slice(2, 7).toUpperCase().replace(/[^A-Z0-9]/g, 'Q');
 /* the wire version the server will accept, read from the server itself */
@@ -39,6 +47,7 @@ const PROTO = +(/const PROTO = (\d+);/.exec(fs.readFileSync(path.join(REPO, 'ser
 const CHROME = process.env.CHROME || [
   '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
   '/tmp/chs/chrome-headless-shell-linux64/chrome-headless-shell',
+  '/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell',
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
 ].find(p => { try { return fs.statSync(p).isFile(); } catch { return false; } });
 
@@ -73,7 +82,7 @@ srv.stdout.on('data', d => { srvLog += d; });
 srv.stderr.on('data', d => { srvLog += d; });
 for (let i = 0; i < 40 && !/multiplayer server on/.test(srvLog); i++) await sleep(100);
 if (!/multiplayer server on/.test(srvLog)) { console.error(srvLog); process.exit(2); }
-say(`server on :${PORT}, room ${ROOM}, ${N} players`);
+say(`server on :${PORT}, room ${ROOM}, ${N} players, mission ${LEVEL}`);
 
 const browser = await puppeteer.launch({
   executablePath: CHROME, headless: true, protocolTimeout: 900000,
@@ -85,7 +94,7 @@ const browser = await puppeteer.launch({
 
 const pages = [], errors = [];
 try {
-  const url = `http://127.0.0.1:${PORT}/NUKEM.html?nzq=low#mp=${ROOM}&level=2&mode=dm`;
+  const url = `http://127.0.0.1:${PORT}/NUKEM.html?nzq=low#mp=${ROOM}&level=${LEVEL}&mode=dm`;
   /* slow software rendering: give a crowded machine proportionally longer */
   const SLOW = N / 2;
   for (let i = 0; i < N; i++) {
@@ -123,6 +132,11 @@ try {
   for (let i = 0; i < N; i++) await waitFor(pages[i], 'NZ.net.me().inMatch && player.alive', 10000, `page ${i} in match`);
   const noEnemies = await pages[0].evaluate(() => enemies.length === 0 && pickups.length === 0 && NZ.net.spawnPoints().length > 5);
   check(noEnemies, 'match level: no enemies, no pickups, spawn points from the level');
+  if (LEVEL === 4) {
+    const ar = await pages[0].evaluate(() => ({ a: NZ.net.arena(), map: NZ.net.map(), inside: NZ.net.spawnPoints().every(s => NZ.net.inArena(s.x, s.z)), me: NZ.net.inArena(player.x, player.z) }));
+    check(ar.map.name === 'ABLUKA' && ar.a.fenced && ar.a.fenceRuns >= 10 && ar.inside && ar.me,
+      `ABLUKA arena: ${ar.a.cells} cells, ${ar.a.fenceRuns} fence runs, every spawn inside`);
+  }
 
   /* 2. direct connections */
   for (let i = 0; i < N; i++) {
@@ -148,17 +162,19 @@ try {
   check(err < 0.25 && seen && Math.abs(Math.atan2(Math.sin(seen.yaw - real.yaw), Math.cos(seen.yaw - real.yaw))) < 0.05, `A draws B where B really is (error ${err.toFixed(3)} units)`);
 
   /* interpolation smoothness: B walks a straight line; A samples what it draws */
-  await pages[1].evaluate(() => {
-    window.__walk = setInterval(() => { player.x += 0.35; }, 16);
-  });
+  /* along x on mission 2; on ABLUKA north up 232 Sk, which stays inside */
+  const AX = LEVEL === 4 ? 'z' : 'x', STEP = LEVEL === 4 ? -0.35 : 0.35;
+  await pages[1].evaluate((ax, st) => {
+    window.__walk = setInterval(() => { player[ax] += st; }, 16);
+  }, AX, STEP);
   const trail = [];
   for (let k = 0; k < 30; k++) {
-    trail.push(await pages[0].evaluate(id => { const p = NZ.net.peers().find(q => q.id === id); return p && p.pos ? p.pos.x : null; }, ids[1]));
+    trail.push(await pages[0].evaluate((id, ax) => { const p = NZ.net.peers().find(q => q.id === id); return p && p.pos ? p.pos[ax] : null; }, ids[1], AX));
     await sleep(33);
   }
   await pages[1].evaluate(() => clearInterval(window.__walk));
   let back = 0;
-  for (let k = 1; k < trail.length; k++) if (trail[k] !== null && trail[k - 1] !== null && trail[k] < trail[k - 1] - 1e-4) back++;
+  for (let k = 1; k < trail.length; k++) if (trail[k] !== null && trail[k - 1] !== null && (trail[k] - trail[k - 1]) * Math.sign(STEP) < -1e-4) back++;
   check(back === 0, `remote movement never jumps backwards (${back} reversals in ${trail.length} samples)`);
   const lag = await pages[0].evaluate(id => { const p = NZ.net.peers().find(q => q.id === id); return p ? { late: p.late, gap: p.gap } : null; }, ids[1]);
   say(`  interpolation: packet gap ${(lag.gap * 1000).toFixed(1)} ms, jitter ${(lag.late * 1000).toFixed(1)} ms`);
@@ -214,6 +230,83 @@ try {
   });
   check(pz, 'ESC opens and closes the pause menu in a match');
 
+  /* 4b. ABLUKA: what A breaks, B sees broken */
+  let paneI = -1, crateKey = null;
+  if (LEVEL === 4) {
+    /* a facade pane A can see from inside the arena, and a crate in it */
+    const pick = await pages[0].evaluate(() => {
+      const G = NZ.destruct && NZ.destruct.glass;
+      let pane = null;
+      if (G && G.ready()) {
+        for (let i = 0; i < G.panes.length; i++) {
+          const d = G.panes[i], st = G.state(i);
+          if (!st || st.stage !== 0) continue;
+          for (const sgn of [1, -1]) for (const back of [10, 14, 18, 24]) {
+            const sx = d.center[0] + d.normal[0] * back * sgn, sz = d.center[2] + d.normal[2] * back * sgn;
+            const cx = Math.floor(sx / CELL), cz = Math.floor(sz / CELL);
+            if (!NZ.net.inArena(sx, sz) || blockedCell(cx, cz)) continue;
+            const fy = floorAt(cx, cz), eye = new THREE.Vector3(sx, fy + EYE - 0.25, sz);
+            const dir = new THREE.Vector3(d.center[0] - sx, d.center[1] - eye.y, d.center[2] - sz);
+            const dist = dir.length(); dir.normalize();
+            if (Math.abs(castWall(eye, dir, dist + 6) - dist) > 1.2) continue;
+            const score = Math.hypot(sx - 540, sz - 170);
+            if (!pane || score < pane.score) pane = { i, id: d.id, sx, sz, fy, tx: d.center[0], ty: d.center[1], tz: d.center[2], score };
+          }
+        }
+      }
+      let crate = null;
+      try {
+        for (const c of NZ.destruct.snapshot().crates) {
+          if (!NZ.net.inArena(c.cx * CELL + 2, c.cy * CELL + 2)) continue;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const ax = c.cx + dx * 3, ay = c.cy + dy * 3;
+            if (!NZ.net.inArena(ax * CELL + 2, ay * CELL + 2) || blockedCell(ax, ay) || blockedCell(c.cx + dx, c.cy + dy) || blockedCell(c.cx + dx * 2, c.cy + dy * 2)) continue;
+            const fy = floorAt(ax, ay);
+            crate = { cx: c.cx, cy: c.cy, hp: c.hp, sx: ax * CELL + CELL / 2, sz: ay * CELL + CELL / 2, fy,
+              tx: c.cx * CELL + CELL / 2, ty: fy + 2.0, tz: c.cy * CELL + CELL / 2 };
+            break;
+          }
+          if (crate) break;
+        }
+      } catch (e) { }
+      return { pane, crate, panes: G ? G.panes.length : 0 };
+    });
+    say(`  ${pick.panes} breakable panes; target pane ${pick.pane ? pick.pane.id : 'none'}, crate ${pick.crate ? pick.crate.cx + ',' + pick.crate.cy : 'none'}`);
+    const shoot = (t, n) => pages[0].evaluate(async (t, n) => {
+      const w = WPN[player.weapon]; w.spread = 0; w.adsSpread = 0;
+      player.x = t.sx; player.z = t.sz; player.y = t.fy; player.vy = 0; player.invT = 99;
+      player.moveBlend = 0; player.sprint = 0; player.dash = 0; player.onGround = true;
+      for (let k = 0; k < n; k++) {
+        const ox = player.x, oy = player.y + EYE - 0.25, oz = player.z;
+        const dx = t.tx - ox, dy = t.ty - oy, dz = t.tz - oz;
+        player.yaw = Math.atan2(-dx, -dz); player.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+        camera.rotation.set(player.pitch, player.yaw, 0);
+        fire();
+        await new Promise(r => setTimeout(r, 160));
+      }
+    }, t, n);
+    if (check(!!pick.pane, 'a breakable pane in reach of the arena')) {
+      paneI = pick.pane.i;
+      await shoot(pick.pane, 3);
+      await sleep(2500 * SLOW);
+      const ga = await pages[0].evaluate(i => NZ.destruct.glass.state(i), paneI);
+      const gb = await pages[1].evaluate(i => NZ.destruct.glass.state(i), paneI);
+      check(ga.stage > 0 && gb.stage === ga.stage && gb.energy === ga.energy && gb.remaining === ga.remaining,
+        `pane ${ga.id}: A stage ${ga.stage} energy ${ga.energy}, B stage ${gb.stage} energy ${gb.energy} (same cracks on both)`);
+    }
+    if (check(!!pick.crate, 'a crate inside the arena')) {
+      const c = pick.crate;
+      crateKey = c.cx + ',' + c.cy;
+      await shoot(c, 12);
+      await sleep(2500 * SLOW);
+      const ka = await pages[0].evaluate(k => NZ.destruct.brokenCells.some(b => b[0] + ',' + b[1] === k), crateKey);
+      const kb = await pages[1].evaluate(k => NZ.destruct.brokenCells.some(b => b[0] + ',' + b[1] === k), crateKey);
+      check(ka && kb, `crate ${crateKey} broken on A (${ka}) and on B (${kb})`);
+    }
+    const rep = await pages[1].evaluate(() => NZ.net.damage());
+    say(`  B replayed ${rep.replayed} impacts from A`);
+  }
+
   /* 5. the server turns away a stale protocol and a full room */
   const probe = (msg) => new Promise(res => {
     const ws = new WebSocket(`ws://127.0.0.1:${PORT}/signal`);
@@ -224,15 +317,37 @@ try {
   });
   const v = await probe({ t: 'join', room: ROOM, proto: 999, name: 'old', level: 2 });
   check(v && v.t === 'error' && v.code === 'version', `stale page refused (${v && v.code})`);
-  const f = await probe({ t: 'join', room: ROOM, proto: PROTO, name: 'extra', level: 2 });
+  const f = await probe({ t: 'join', room: ROOM, proto: PROTO, name: 'extra', level: LEVEL });
   check(f && f.t === 'error' && f.code === 'full', `full room refused (${f && f.code})`);
-  const l = await probe({ t: 'join', room: ROOM, proto: PROTO, name: 'lost', level: 4 });
-  check(l && l.t === 'error' && l.code === 'level' && l.level === 2, `wrong mission redirected to ${l && l.level}`);
+  const l = await probe({ t: 'join', room: ROOM, proto: PROTO, name: 'lost', level: LEVEL === 4 ? 2 : 4 });
+  check(l && l.t === 'error' && l.code === 'level' && l.level === LEVEL, `wrong mission redirected to ${l && l.level}`);
 
   /* 6. leaving */
   await pages[N - 1].close();
   await waitFor(pages[0], `NZ.net.peers().length === ${N - 2}`, 15000 * SLOW, 'leaver removed');
   check(true, 'a player who closes the tab disappears from the others');
+
+  /* 7. ABLUKA: someone who joins now is handed what is already broken */
+  if (LEVEL === 4 && (paneI >= 0 || crateKey)) {
+    const ctx = await browser.createBrowserContext();
+    const late = await ctx.newPage();
+    await late.setViewport({ width: 400, height: 250 });
+    late.on('console', m => { if (m.type() === 'error') errors.push(`late: ${m.text()}`); });
+    late.on('pageerror', e => errors.push(`late: ${e.message}`));
+    await late.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await waitFor(late, 'typeof state !== "undefined" && state.booted && NZ.net.me().welcomed', 240000, 'late page boot');
+    await waitFor(late, 'NZ.net.peers().some(p => p.open)', 30000, 'late page connects');
+    await waitFor(late, 'NZ.net.damage().snapshotsIn > 0', 20000, 'late page gets the damage');
+    await sleep(1500);
+    const lp = paneI >= 0 ? await late.evaluate(i => NZ.destruct.glass.state(i), paneI) : null;
+    const ap = paneI >= 0 ? await pages[0].evaluate(i => NZ.destruct.glass.state(i), paneI) : null;
+    if (lp) check(lp.stage === ap.stage && lp.stage > 0, `late arrival's pane: stage ${lp.stage}, A has ${ap.stage}`);
+    if (crateKey) {
+      const lk = await late.evaluate(k => NZ.destruct.brokenCells.some(b => b[0] + ',' + b[1] === k), crateKey);
+      check(lk, `late arrival's crate ${crateKey} is broken too`);
+    }
+    await late.close();
+  }
 
   const hudTxt = await pages[0].evaluate(() => document.getElementById('nzNet').textContent);
   say(`  HUD on A: ${hudTxt}`);

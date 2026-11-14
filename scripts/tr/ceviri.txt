@@ -871,7 +871,7 @@ subtitle((who ? 'SENİ İNDİREN: ' + who : 'ÖLDÜN') + ' — ' + RESPAWN_DELAY
 @@OLD 1
 return PEERS[id] ? PEERS[id].name : 'SOMEONE';
 @@NEW
-return PEERS[id] ? PEERS[id].name : 'BİRİ';
+return r && r.name ? r.name : 'BİRİ';
 @@END
 @@OLD 1
 else killFeed('THE ARENA', 'HAZARD', nameOf(victim), { victimYou: victim === ME.id });
@@ -942,8 +942,7 @@ if (h2) h2.textContent = 'ÇOK OYUNCULU — ' + mname;
     if (brief) brief.innerHTML = 'Deathmatch, up to ' + ROOM_MAX + ' players. Send the link below to a friend: they click it and they are in.<br>' +
       'No enemies, no pickups &mdash; everyone spawns with the same guns and respawns 3 seconds after dying.';
 @@NEW
-    if (brief) brief.innerHTML = 'Ölüm maçı, en fazla ' + ROOM_MAX + ' oyuncu. Aşağıdaki bağlantıyı bir arkadaşına gönder: tıklaması yeterli, maça girer.<br>' +
-      'Düşman yok, toplanacak eşya yok &mdash; herkes aynı silahlarla başlar ve öldükten 3 saniye sonra yeniden doğar.';
+'Ölüm maçı, en fazla ' + ROOM_MAX + ' oyuncu. Aşağıdaki bağlantıyı bir arkadaşına gönder: tıklaması yeterli, maça girer.<br>' +
 @@END
 @@OLD 1
 if (small) small.textContent = 'ROOM ' + ROOM + ' — THE LINK IS THE INVITE';
@@ -983,7 +982,7 @@ leave.textContent = 'TEK OYUNCULU';
 @@OLD 1
 if (pp) pp.innerHTML = 'You are still in the match &mdash; the others can see you.';
 @@NEW
-if (pp) pp.innerHTML = 'Hâlâ maçtasın &mdash; diğerleri seni görebiliyor.';
+pp.innerHTML = 'Hâlâ maçtasın &mdash; diğerleri seni görebiliyor.';
 @@END
 @@OLD 1
 pl.textContent = 'LEAVE MATCH';
@@ -1014,7 +1013,6 @@ var n = cleanName(String(v || '').toLocaleUpperCase('tr-TR'));
           n ? (n + 1) + ' PLAYERS IN THE ROOM' : 'WAITING FOR A FRIEND — SEND THEM THE LINK. YOU CAN JOIN NOW AND WARM UP.');
 @@NEW
 (anyFail ? 'BİR OYUNCUYA DOĞRUDAN ULAŞILAMADI. SUNUCUNUN BİR AKTARMA (RELAY) SUNUCUSUNA İHTİYACI VAR (MULTIPLAYER.MD DOSYASINA BAK).' :
-          n ? 'ODADA ' + (n + 1) + ' OYUNCU VAR' : 'ARKADAŞIN BEKLENİYOR — ONA BAĞLANTIYI GÖNDER. ŞİMDİ KATILIP ISINABİLİRSİN.');
 @@END
 @@OLD 1
 ping: pr.open ? (stale ? 'LOST' :

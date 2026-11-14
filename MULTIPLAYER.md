@@ -4,6 +4,25 @@ Send a friend a link, they click it, you're both in the same match. Each
 browser connects straight to the other ones (WebRTC). The server only
 introduces them, so it adds no lag, and restarting it doesn't end a match.
 
+## Two maps
+
+Clicking **ÇOK OYUNCULU** (multiplayer) asks which one:
+
+- **ER MEYDANI**: Mission 2 (The Crucible), the whole map.
+- **ABLUKA**: a fenced-off corner of Mission 4. It's the roundabout where
+  232. Sokak meets 233. Sokak, with GÜVEN ECZANESİ on the corner, about 16 m
+  of each arm of 232 Sk, the mouth of 233 Sk between A-BLOK and B-BLOK, the
+  foot of the park slope (it climbs 2 m to the west) and the ground-floor
+  room of each block that opens onto the junction. It's about 54 × 47 m and
+  fenced with the same red-and-white police bariyer the mission uses.
+  Nobody can walk past the fence, players or bots, but bullets fly over it.
+  It has 17 spawn points.
+
+The lobby shows the map. While you're alone in the room and not yet
+playing, **DEĞİŞTİR** (change) switches it. Like the mode switch, that
+reloads into the same room, so a link you already sent still brings your
+friend to you.
+
 ## Two modes
 
 The lobby's **MOD** row picks one. A room has one mode, set by whoever opens
@@ -44,7 +63,7 @@ after that. Its links end in `&mode=dm`.
 
 ## Both modes
 
-- **Mission 2 (The Crucible)**, up to **4 players** per room.
+- **Either map** (above), up to **4 players** per room.
 - Everyone shows up as the third-person figure from `nz-hero.js`. Works
   whether you play in first or third person (V).
 - No enemies, pickups or lifts. Normal doors start open; secret doors and
@@ -52,13 +71,28 @@ after that. Its links end in `&mode=dm`.
 - Everyone spawns with the same guns: pistol, shotgun, chaingun, rifle, AK,
   M4, DMR. No RPG, grenades or NULLSTAR yet.
 - Headshots do 2.5x damage, arms and legs 0.75x.
+- **Breakable things break the same for everyone.** Every bullet that hits a
+  wall, a player's or a bot's, is replayed on the other screens through the
+  same destruction code that handled it on the shooter's screen. A cracked
+  window, a broken car window or a smashed crate (which also opens the way
+  through) therefore looks the same everywhere. Someone who joins
+  mid-match is sent what's already broken.
+- **Frame rate first.** If frames run slow (under ~36 fps) once the renderer
+  has dropped what effects it can, the game lowers the resolution:
+  1. the pixel ratio to 1 on a high-DPI laptop screen;
+  2. the 3D scene's resolution, in two steps.
+  The HUD stays sharp. A step that doesn't help is undone, and resolution
+  comes back when there's headroom. On an Intel HD 620 laptop at 150%
+  scaling, ABLUKA ran at 15–19 fps before; the first step alone measured
+  about 25 fps on the same views. `?nzgov=0` in the address turns this off.
 
 ## Try it on your own PC
 
 1. Double-click `SERVE-MP.cmd` (or run `npm run mp` in this folder). It uses
    the `ws` package that's already in `node_modules`; if it's ever missing,
    run `npm install`. Close `SERVE.cmd`'s window first: both use port 4173.
-2. The browser opens <http://127.0.0.1:4173/>. Click **ÇOK OYUNCULU**.
+2. The browser opens <http://127.0.0.1:4173/>. Click **ÇOK OYUNCULU** and
+   pick a map.
 3. Click **MAÇA KATIL** to play against the bots. For a second player, click
    **KOPYALA** and open the link in another browser window.
 
@@ -89,8 +123,8 @@ Render deploys from a Git repository (GitHub, GitLab or Bitbucket).
    for now (see the relay section below).
 
 3. When the deploy is done, open the address Render gives you (something like
-   `https://nuke-zone-mp.onrender.com`), click **ÇOK OYUNCULU**, **KOPYALA**,
-   and send the link to your friend.
+   `https://nuke-zone-mp.onrender.com`), click **ÇOK OYUNCULU**, pick a map,
+   click **KOPYALA** and send the link to your friend.
 
 The page and the server go together: a browser holding a page from before an
 update is told to refresh instead of joining.
@@ -137,9 +171,13 @@ the team match is 2v2.
 - `nz-net.js` (loaded last by `NUKEM.html`) does the multiplayer itself. Each
   pair of players gets two channels:
   - **`s`**: unordered, never resent. A 48-byte state packet every frame (one
-    per bot as well), pings, gunfire. A lost packet is just skipped, since
-    the next one is a frame behind it.
-  - **`e`**: reliable and in order. Hits, deaths, names, sides, the round.
+    per bot as well) and pings. A lost packet is just skipped, since the next
+    one is a frame behind it.
+  - **`e`**: reliable and in order. Gunfire, hits, deaths, names, sides, the
+    round, and the "what's broken" snapshot for a new arrival. Gunfire is
+    here because each shot's wall impacts are replayed on the other screens.
+    A lost shot would mean a window broken on one screen and whole on
+    another.
 - Each browser moves its own player exactly as in single player, so your own
   movement has no network delay. Other players and bots are drawn a couple
   of packets in the past and smoothed between real positions (about 25 to
@@ -160,8 +198,20 @@ the team match is 2v2.
 - `nz-hero.js` section 11 ("puppets") builds and animates the other players'
   figures, and the bots', with the same animator as yours. Your own figure
   isn't affected.
+- **ABLUKA's fence:** `nz-net.js` lists the arena as rectangles of map
+  cells (`MAPS`).
+  - A step out of it is refused in `canStand()`, the same check that stops
+    you at walls, so it holds for bots too.
+  - The bots' paths keep to it (`NZ.bots.setAllow`).
+  - The bariyer runs are built by `nz-street-side.js` through its
+    `streetSideCordon` hook while it builds the street. They're lit and
+    merged like the mission's own police lines, so no extra draw calls.
+  - Only doors inside the arena open, and only spawn points inside it are
+    used.
+- The resolution step-down uses `NZ.render.setScale()` (in `nz-render.js`)
+  for the 3D scene and the page's pixel ratio for the rest.
 - Without `#mp=` in the address, `nz-net.js` only adds the ÇOK OYUNCULU
-  button. Single player is unchanged.
+  button (and its map choice). Single player is unchanged.
 
 ## Checking it
 
@@ -179,6 +229,12 @@ Both need Chrome; point `CHROME=` at it if it isn't found.
   in the right place, and that a shot kills, scores and respawns. It also
   checks that the server turns away an old copy of the page, a full room
   and the wrong mission. Run `npm run check:mp -- --players 3` for three.
+- Add `-- --level 4` to either check to play ABLUKA. The team check then
+  also watches the bots for 8 s: every seat dealt and every step they take
+  has to be inside the fence. The deathmatch check also checks that every
+  spawn point is inside the fence, that a window and a crate shot on one
+  screen break the same way on the other, and that a player who joins
+  afterwards gets the same damage.
 
 ## Known limits
 
@@ -197,8 +253,13 @@ Both need Chrome; point `CHROME=` at it if it isn't found.
   figure is built.
 - The frame rate with three other figures on screen hasn't been measured on
   a real graphics card yet.
-- Other missions can be picked with `&level=1..4` in the link, but only
-  Mission 2 has been tested.
+- Missions 1 and 3 can still be played with `&level=1` / `&level=3` in the
+  link, but they aren't offered and haven't been tested.
+- ABLUKA loads Mission 4's street buildings (about 25 MB, 2–3 MB over the
+  wire), so its first load is slower than ER MEYDANI's, especially on a
+  phone.
+- On ABLUKA you can walk through GÜVEN ECZANESİ's shop windows. The
+  mission's map has no wall there; it's the same in single player.
 
 ## Files
 
@@ -212,3 +273,18 @@ the module list), `package.json` (`ws` dependency; `mp`, `start`,
 folders).
 Originals: `.backup-multiplayer/` (before multiplayer) and `.backup-bots/`
 (before the team match).
+
+ABLUKA, synced destruction and the frame-rate step-down changed:
+- `nz-net.js`: maps, arena and fence, impact replay, damage snapshot, frame
+  governor.
+- `nz-bots.js`: `setAllow`.
+- `nz-street-side.js`: the `streetSideCordon` hook.
+- `nz-render.js`: `setScale()`, plus `scale` and `pinned` in `stats`.
+- `NUKEM.html` and `public/game/NUKEM.html`: the Mission 4 car's post is
+  only set when the car was really made.
+- `scripts/mp-smoke.mjs` and `scripts/team-smoke.mjs`: `--level 4`.
+- `scripts/tr/ceviri.txt`: four entries that had drifted from the lobby
+  code.
+- `MULTIPLAYER.md`.
+
+Their originals are in `.backup-cordon-mp/`.

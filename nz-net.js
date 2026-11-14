@@ -1,10 +1,12 @@
 /* ===========================================================================
    NZ-NET  --  multiplayer, browser to browser.
 
-   Open the game with  #mp=ROOM  in the address and it becomes a multiplayer
-   room: a team match with bots, or the old free-for-all deathmatch if the
-   link also says &mode=dm. Without #mp= this file adds one MULTIPLAYER
-   button to the title screen and nothing else: single player is untouched.
+   Open the game with  #mp=ROOM&level=N  in the address and it becomes a
+   multiplayer room on mission N (2 = ER MEYDANI, 4 = ABLUKA): a team match
+   with bots, or the old free-for-all deathmatch if the link also says
+   &mode=dm. Without #mp= this file adds one MULTIPLAYER button to the title
+   screen, which asks for a map, and nothing else: single player is
+   untouched.
 
    HOW THE PLAYERS TALK
      The game server (server/mp-server.mjs) only introduces the browsers: a
@@ -12,8 +14,18 @@
      every pair of players is connected DIRECTLY (a full mesh), over two data
      channels each:
 
-       's'  unordered, no resends    state every frame, pings, gunfire
-       'e'  reliable, in order       hits, deaths, names, hello
+       's'  unordered, no resends    state every frame, pings
+       'e'  reliable, in order       gunfire, hits, deaths, names, hello,
+                                     the round, the damage snapshot for a
+                                     late arrival
+
+     Gunfire rides the reliable channel because every round that lands on a
+     wall -- a player's or a bot's -- is replayed on the other screens
+     through the same surfaceHit hook the shooter's own hitscan used, so a
+     pane, a car window or a crate breaks the same way everywhere
+     (nz-destruct.js is deterministic for the same hit, direction, origin
+     and damage). A lost shot would be a pane intact on one screen and gone
+     on another.
 
      A lost position update is simply skipped -- the next one is a frame
      behind it -- so a dropped packet never stalls the ones after it, which is
@@ -48,6 +60,21 @@
      DEATHMATCH (&mode=dm)   The original free-for-all: no teams, no bots,
      respawn 3 s after dying at the spawn point farthest from the others.
 
+   THE MAPS
+     Mission 2 is played whole. Mission 4 is a whole city, so the match takes
+     one corner of it (MAPS below): the roundabout where 232 and 233 Sk meet,
+     GUVEN ECZANESI, a stretch of each arm, the foot of the park slope and
+     the junction rooms of A-BLOK and B-BLOK. canStand() refuses a step out
+     of it (players and bots alike), the bots' paths keep to it
+     (NZ.bots.setAllow), the fence is the mission's own bariyer (stood by
+     nz-street-side through its 'streetSideCordon' hook), only doors inside
+     it open, and only spawn points inside it are used. Rounds still fly
+     over the fence.
+
+     A slow machine trades resolution for frames during a match (GOV below):
+     first the pixel ratio, then the scene scale, each cut kept only if it
+     bought frame time. nz-render's own ladder sheds post effects first.
+
    WHO RUNS A TEAM MATCH
      One browser: of the players who have joined the match, the one who came
      into the room first (authId). It deals the sides, starts and ends the
@@ -60,8 +87,12 @@
    CONTRACT WITH THE REST OF THE GAME
      Wraps, only in a multiplayer room: spawnEnemy, makePickup, updateLifts,
      useAction, winLevel, saveManualGame, killPlayer, fire, hitscan,
-     startGame, placeEntities. Reads player, WPN, state, D, AMMOMAX, DOORS,
-     LEVEL by name (top-level script bindings). 'render' hook at priority
+     startGame, placeEntities, and canStand on a fenced map. Reads player,
+     WPN, state, D, AMMOMAX, DOORS, LEVEL, MW, MH, CELL, grid by name
+     (top-level script bindings); calls castWall, floorAt, impactSurface,
+     impactPuff, impactDecal, sfx, tracer, resize. Uses NZ.destruct
+     (snapshot/restore, carGlass), NZ.render.setScale/stats,
+     NZ.streetPark.gradeAt, NZ.bots.setAllow. 'render' hook at priority
      40, ahead of nz-hero's figures (20 and 19); a second one at 15, after
      them, puts the camera on a team-mate while you are down.
    ======================================================================== */
@@ -128,6 +159,68 @@
   function cleanName(s) { return String(s || '').replace(/[^\p{L}\p{N} ._\-]/gu, '').trim().slice(0, 16); }
   function wepName(w) { try { return (WPN[w] && WPN[w].name) || 'SİLAH'; } catch (e) { return 'SİLAH'; } }
 
+  /* ============================================================= maps == */
+  /* What a room can be played on, in picker order. A map with `rects` is a
+     fenced corner of a bigger mission: grid cells x0,y0..x1,y1 inclusive
+     (world = cell * CELL), their union is the arena. `spawns` are cells
+     added to the enemy positions that fall inside it. */
+  var MAPS = [
+    { level: 2, name: 'ER MEYDANI', note: 'kapalı arena, bütün harita' },
+    {
+      level: 4, name: 'ABLUKA', note: 'Seydişehir kavşağı, polis bariyeriyle çevrili',
+      rects: [
+        [121, 22, 144, 35],   /* 232 Sk north arm, to the junction          */
+        [116, 31, 120, 34],   /* GUVEN ECZANESI, the raised corner pharmacy  */
+        [112, 36, 144, 52],   /* the roundabout and the foot of the slope    */
+        [145, 35, 158, 51],   /* the mouth of 233 Sk between the two blocks  */
+        [121, 53, 144, 62],   /* 232 Sk south arm                            */
+        [145, 29, 151, 33],   /* A-BLOK's ground-floor room on the junction  */
+        [145, 55, 152, 60]    /* B-BLOK's ground-floor room on the junction  */
+      ],
+      spawns: [[119, 33], [155, 43], [115, 49], [126, 45], [131, 56], [129, 27]],
+      /* a 1.4 m retaining wall is fence enough: no bariyer on an edge whose
+         outside stands this much higher */
+      fenceRise: 2.5
+    }
+  ];
+  function mapFor(level) {
+    for (var i = 0; i < MAPS.length; i++) if (MAPS[i].level === level) return MAPS[i];
+    return null;
+  }
+  /* The map choice: two buttons under the menu row, shown on demand. Used by
+     the title screen's MULTIPLAYER button (a new room) and by the lobby's
+     change button (the same room under another map, like the mode switch:
+     a link already sent follows it there). */
+  function mapCss() {
+    if ($('nzMapCss')) return;
+    var s = document.createElement('style');
+    s.id = 'nzMapCss';
+    s.textContent =
+      '.nzmaps{display:none;flex-direction:column;align-items:center;gap:1vh;margin-top:1.8vh}' +
+      '.nzmaps.on{display:flex}' +
+      '.nzmaps .lbl{font-size:clamp(10px,1.4vh,14px);letter-spacing:.16em;color:#9e8c6b}' +
+      '.nzmaps .row{display:flex;gap:clamp(9px,1vw,18px);flex-wrap:wrap;justify-content:center}' +
+      '.nzmaps .btn{margin-top:0;display:flex;flex-direction:column;align-items:center;gap:.5vh;padding:1.1vh 2.2vw}' +
+      '.nzmaps .btn small{font-size:clamp(9px,1.25vh,13px);letter-spacing:.06em;font-weight:600;color:#d6c39a;text-transform:none}' +
+      '.nzmaps .btn.cur{border-color:#8fb8ff;color:#cfe0ff}';
+    document.head.appendChild(s);
+  }
+  function mapPicker(id, current, onPick) {
+    mapCss();
+    var box = document.createElement('div');
+    box.className = 'nzmaps'; box.id = id;
+    var html = '<div class="lbl">HARİTA SEÇ</div><div class="row">';
+    for (var i = 0; i < MAPS.length; i++) {
+      var M = MAPS[i];
+      html += '<button class="btn' + (M.level === current ? ' cur' : '') + '" type="button" data-level="' + M.level + '">' +
+        esc(M.name) + '<small>' + esc(M.note) + '</small></button>';
+    }
+    box.innerHTML = html + '</div>';
+    var bs = box.querySelectorAll('button[data-level]');
+    for (var j = 0; j < bs.length; j++) bs[j].onclick = function () { onPick(parseInt(this.getAttribute('data-level'), 10)); };
+    return box;
+  }
+
   /* =====================================================================
      NOT A MULTIPLAYER ROOM: one button on the title screen, nothing else.
      ================================================================== */
@@ -135,8 +228,14 @@
   if (roomParam === null) {
     NZ.on('ready', function () {
       try {
-        var acts = document.querySelector('#scTitle .menu-actions');
+        var title = $('scTitle');
+        var acts = title && title.querySelector('.menu-actions');
         if (!acts || $('btnMulti')) return;
+        var pick = mapPicker('nzMaps', 0, function (level) {
+          global.location.hash = 'mp=' + randomCode(5) + '&level=' + level;
+          global.location.reload();
+        });
+        title.insertBefore(pick, acts.nextSibling);
         var b = document.createElement('button');
         b.className = 'btn'; b.id = 'btnMulti'; b.type = 'button';
         b.textContent = 'ÇOK OYUNCULU';
@@ -146,8 +245,7 @@
             if (info) { info.textContent = 'ÇOK OYUNCULU İÇİN OYUN SUNUCUSU GEREKLİ — npm run mp KOMUTUNU ÇALIŞTIR VE YAZDIĞI ADRESİ AÇ'; info.className = 'save-note err'; }
             return;
           }
-          global.location.hash = 'mp=' + randomCode(5) + '&level=2';
-          global.location.reload();
+          pick.classList.toggle('on');
         };
         acts.appendChild(b);
       } catch (err) { warn('lobby button failed:', err); }
@@ -174,13 +272,19 @@
      tells a late joiner which, and everything below asks teamMode(). */
   var MODE = routeParam('mode') === 'dm' ? 'dm' : 'team';
   function teamMode() { return MODE === 'team'; }
+  var MAP = mapFor(ROUTE_LEVEL) || { level: ROUTE_LEVEL, name: '', note: '' };
+  var AR = null;                 /* fenced map: 1 per grid cell in play       */
+  var LATE = { fires: [], snap: null };   /* arrived before the level did   */
 
   var ME = {
     id: randomId(), name: '', color: 0, welcomed: false, inMatch: false,
     life: 0, frags: 0, deaths: 0, respawnAt: 0, lastSpawn: -1, seq: 0, sendT: 0, pingT: 0, hudT: 0,
     /* team match: side this round (-1: not dealt in), side asked for (-1:
        either), when we came into the room (who runs the match), watching */
-    team: -1, want: -1, j: 0, spec: false, spawned: false, hidden: false, firedAt: -9, botSendT: 0
+    team: -1, want: -1, j: 0, spec: false, spawned: false, hidden: false, firedAt: -9, botSendT: 0,
+    /* impacts replayed from others, damage snapshots taken in, the last
+       spot inside the fence, when the level came up, pulls back inside */
+    replayed: 0, snapsIn: 0, good: null, readyT: 0, fenced: 0
   };
   try { ME.name = cleanName(localStorage.getItem(NAME_KEY)) || ''; } catch (e) { }
   if (!ME.name) ME.name = 'OYUNCU ' + (10 + Math.floor(Math.random() * 90));
@@ -199,7 +303,7 @@
   var ROOM_MAX = 4, HOST_ID = null;
   var SPAWN_CELLS = [], SPAWN_PTS = [];
   var PENDING_KILLER = null;     /* who is shooting while hurtPlayer runs        */
-  var SHOT = { active: false, rays: [], dmg: {}, w: 0 };
+  var SHOT = { active: false, rays: [], dmg: {}, w: 0, org: null, d: 0 };
   var ORIG = {};
   var ERR = 0;
   var BUILD = 'dev';
@@ -264,11 +368,11 @@
   wrap('fire', function (orig) {
     return function () {
       if (!ME.inMatch) return orig.apply(this, arguments);
-      SHOT.active = true; SHOT.rays.length = 0; SHOT.dmg = {}; SHOT.w = player.weapon;
+      SHOT.active = true; SHOT.rays.length = 0; SHOT.dmg = {}; SHOT.w = player.weapon; SHOT.org = null; SHOT.d = 0;
       try { return orig.apply(this, arguments); }
       finally {
         SHOT.active = false;
-        try { if (SHOT.rays.length) { ME.firedAt = nowS(); sendFire(SHOT.w, SHOT.rays); flushHits(SHOT.w); } }
+        try { if (SHOT.rays.length) { ME.firedAt = nowS(); sendFire(SHOT.w, SHOT.rays, SHOT.org, SHOT.d); flushHits(SHOT.w); } }
         catch (err) { netError(err, 'fire'); }
       }
     };
@@ -283,28 +387,82 @@
       var hit = null;
       try { hit = rayPeers(org, dir, wallD); } catch (err) { netError(err, 'rayPeers'); }
       var t = hit ? hit.t : wallD;
-      if (SHOT.active && SHOT.rays.length < 12) SHOT.rays.push([org.x + dir.x * t, org.y + dir.y * t, org.z + dir.z * t, hit ? 1 : 0]);
+      if (SHOT.active && SHOT.rays.length < 12) {
+        /* the stock path below decides a wall hit only while bestT < range:
+           a round that ran out of range landed nowhere, here or there */
+        var nowhere = !hit && !(wallD < range - 0.1);
+        SHOT.rays.push([org.x + dir.x * t, org.y + dir.y * t, org.z + dir.z * t, hit ? 1 : nowhere ? 2 : 0]);
+        if (!SHOT.org) SHOT.org = [org.x, org.y, org.z];
+        SHOT.d = fin(dmg, SHOT.d);
+      }
       if (!hit) return orig.apply(this, arguments);
       try { hitPeer(hit, org, dir, dmg); } catch (err) { netError(err, 'hitPeer'); }
     };
   });
+  /* A fenced map: the edge of the arena is a wall to feet, not to rounds.
+     Same footprint test as canStand itself, one cell set wider. */
+  function arenaIn(cx, cy) {
+    if (!AR) return true;
+    return cx >= 0 && cy >= 0 && cx < MW && cy < MH && AR[cy * MW + cx] === 1;
+  }
+  if (MAP.rects) wrap('canStand', function (orig) {
+    return function (x, z, rad) {
+      if (AR) {
+        var r = fin(rad, 0);
+        var c0 = Math.floor((x - r) / CELL), c1 = Math.floor((x + r) / CELL);
+        var r0 = Math.floor((z - r) / CELL), r1 = Math.floor((z + r) / CELL);
+        for (var cy = r0; cy <= r1; cy++) for (var cx = c0; cx <= c1; cx++) if (!arenaIn(cx, cy)) return false;
+      }
+      return orig.apply(this, arguments);
+    };
+  });
 
   /* ------------------------------------------------------ level set-up -- */
+  /* the arena of a fenced map, as a cell mask over the level grid */
+  function buildArena() {
+    if (!MAP.rects) return;
+    var m = new Uint8Array(MW * MH);
+    for (var i = 0; i < MAP.rects.length; i++) {
+      var R = MAP.rects[i];
+      for (var y = Math.max(0, R[1]); y <= Math.min(MH - 1, R[3]); y++)
+        for (var x = Math.max(0, R[0]); x <= Math.min(MW - 1, R[2]); x++) m[y * MW + x] = 1;
+    }
+    AR = m;
+  }
+  /* how far a sight line runs before a wall or the fence */
+  function openRun(org, dir, maxD) {
+    var free = 0;
+    try { free = castWall(org, dir, maxD); } catch (e) { free = 0; }
+    if (AR) for (var s = 1; s < free; s++) {
+      if (!arenaIn(Math.floor((org.x + dir.x * s) / CELL), Math.floor((org.z + dir.z * s) / CELL))) { free = s; break; }
+    }
+    return free;
+  }
+
   function afterPlace() {
+    buildArena();
     /* Enemy positions are where the level designer put fights: good spawn
-       points, spread over every tier. The single-player start joins them. */
+       points, spread over every tier. The single-player start joins them;
+       on a fenced map only the ones inside count, plus the map's own. */
     var pts = [], used = {};
     var add = function (gx, gy, yaw) {
       var k = gx + ',' + gy;
       if (used[k]) return;
       used[k] = 1;
+      if (!arenaIn(gx, gy)) return;
       try { if (typeof liftAt === 'function' && liftAt(gx, gy)) return; } catch (e) { }
+      try { if (blockedCell(gx, gy)) return; } catch (e) { }
+      /* two spawns a cell apart are one spawn twice as likely */
+      for (var n = 0; n < pts.length; n++) {
+        if (Math.abs(pts[n].gx - gx) <= 1 && Math.abs(pts[n].gy - gy) <= 1) return;
+      }
       var y = 0;
       try { y = floorAt(gx, gy); } catch (e) { }
-      pts.push({ x: gx * CELL + CELL / 2, y: fin(y), z: gy * CELL + CELL / 2, yaw: yaw });
+      pts.push({ x: gx * CELL + CELL / 2, y: fin(y), z: gy * CELL + CELL / 2, yaw: yaw, gx: gx, gy: gy });
     };
     for (var i = 0; i < SPAWN_CELLS.length; i++) add(SPAWN_CELLS[i][0], SPAWN_CELLS[i][1], null);
     add(Math.floor(player.x / CELL), Math.floor(player.z / CELL), player.yaw);
+    if (MAP.spawns) for (var ms = 0; ms < MAP.spawns.length; ms++) add(MAP.spawns[ms][0], MAP.spawns[ms][1], null);
     /* Face the longest clear sight line from each spot, so nobody spawns
        nose to a wall; between equally open directions, prefer the one
        toward the middle of the map. */
@@ -321,8 +479,7 @@
         var yaw = a / 24 * Math.PI * 2;
         org.set(p.x, p.y + eye, p.z);
         dir.set(-Math.sin(yaw), 0, -Math.cos(yaw));
-        var free = 0;
-        try { free = castWall(org, dir, 120); } catch (e) { free = 0; }
+        var free = openRun(org, dir, 120);
         var score = Math.min(free, 120) + 6 * Math.cos(angWrap(yaw - toMid));
         if (score > bestScore) { bestScore = score; bestYaw = yaw; }
       }
@@ -330,16 +487,129 @@
     }
     SPAWN_PTS = pts;
     /* Doors: open the ordinary ones for good, leave secrets and the key door
-       shut (useAction is off, so nobody can open them on one screen only). */
+       shut (useAction is off, so nobody can open them on one screen only).
+       On a fenced map only a door inside the arena opens; one in its edge is
+       a wall like the rest of the edge, so it is held shut. */
     try {
       for (var d = 0; d < DOORS.length; d++) {
         var dr = DOORS[d];
         if (dr.secret || dr.kind === 'key') continue;
+        if (!arenaIn(dr.cx, dr.cy)) { dr.tgt = 0; continue; }
         dr.tgt = 1; dr.used = true;
       }
       updateDoors(10);
     } catch (err) { netError(err, 'doors'); }
+    if (AR && pts.length < 4) warn('only ' + pts.length + ' spawn points inside the arena');
+    /* the bots walk the same arena: their paths keep to the cells in play */
+    try { if (NZ.bots && NZ.bots.setAllow) NZ.bots.setAllow(AR ? function (i) { return AR[i] === 1; } : null); }
+    catch (err) { netError(err, 'bots-arena'); }
   }
+
+  /* ------------------------------------------------ the arena's fence -- */
+  /* Every edge between a cell in play and a walkable cell outside it gets a
+     bariyer, merged into straight runs and split wherever the ground under
+     it steps. nz-street-side builds them while it builds the street, so they
+     are lit and merged exactly like the police lines the mission already has.
+     Edges against a wall, a block, a closed door or a much higher terrace
+     need nothing. */
+  function walkableCell(cx, cy, openDoor) {
+    if (cx < 0 || cy < 0 || cx >= MW || cy >= MH) return false;
+    var t = grid[cy * MW + cx];
+    if (t === S_SOLID || t === S_EXIT || t === S_BLOCK) return false;
+    if (t === S_DOOR || t === S_KEY || t === S_SECRET) {
+      if (!openDoor) return false;
+      for (var i = 0; i < DOORS.length; i++) if (DOORS[i].cx === cx && DOORS[i].cy === cy) return DOORS[i].tgt > 0.5;
+      return false;
+    }
+    return true;
+  }
+  function fenceRuns(api) {
+    var edges = {}, rise = fin(MAP.fenceRise, 2.5), C = CELL;
+    var vis = function (x, z) {
+      /* the visible ground under a point: the street decks on the arms, the
+         park's grade on the slope, the grid floor elsewhere */
+      var cx = Math.floor(x / C), cy = Math.floor(z / C), f = 0;
+      try { f = floorAt(cx, cy); } catch (e) { }
+      if (api.armGroundY && x >= 484 && x <= 580 && (z <= 144 || z >= 208)) return api.armGroundY(x);
+      if (Math.abs(f) < 0.01) return api.ROAD_TOP;
+      if (Math.abs(f - 0.5) < 0.01) return api.PAVE_TOP;
+      if (f > 0.6 && NZ.streetPark && typeof NZ.streetPark.gradeAt === 'function') return NZ.streetPark.gradeAt(x);
+      return f;
+    };
+    var DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (var cy = 0; cy < MH; cy++) for (var cx = 0; cx < MW; cx++) {
+      if (!AR[cy * MW + cx] || !walkableCell(cx, cy, true)) continue;
+      var fIn = 0; try { fIn = floorAt(cx, cy); } catch (e) { }
+      for (var k = 0; k < 4; k++) {
+        var nx = cx + DIRS[k][0], ny = cy + DIRS[k][1];
+        if (arenaIn(nx, ny) || !walkableCell(nx, ny, false)) continue;
+        var fOut = 0; try { fOut = floorAt(nx, ny); } catch (e) { }
+        if (fOut > fIn + rise) continue;
+        /* a line key: axis, the line's coordinate and which side is inside */
+        var axis = DIRS[k][0] ? 'z' : 'x';
+        var line = DIRS[k][0] ? (DIRS[k][0] > 0 ? cx + 1 : cx) * C : (DIRS[k][1] > 0 ? cy + 1 : cy) * C;
+        var near = DIRS[k][0] ? -DIRS[k][0] : -DIRS[k][1];
+        var key = axis + line + ':' + near;
+        (edges[key] || (edges[key] = { axis: axis, c: line, near: near, cells: [] })).cells.push(axis === 'z' ? cy : cx);
+      }
+    }
+    /* Each line breaks into stretches of consecutive cells, and a stretch
+       into pieces wherever the ground under it steps (a kerb, a footway
+       edge) or has climbed 0.9 u along a grade. A piece too short for the
+       bariyer's 1.40 m chevron board joins its neighbour. The panel stands
+       at the middle of its piece's ground; the posts find the ground each. */
+    var runs = [];
+    var emit = function (E, pieces, g) {
+      for (var p = 0; p < pieces.length; p++) {
+        var P = pieces[p];
+        runs.push({ axis: E.axis, c: E.c, near: E.near, a0: P.a + 0.2, a1: P.b - 0.2, y: (P.lo + P.hi) / 2, g: g });
+      }
+    };
+    for (var key2 in edges) {
+      var E = edges[key2], cells = E.cells.sort(function (a, b) { return a - b; });
+      var o = E.c + E.near * 0.25;           /* a quarter unit inside the line */
+      var g = E.axis === 'z' ? (function (o) { return function (s) { return vis(o, s); }; })(o)
+                             : (function (o) { return function (s) { return vis(s, o); }; })(o);
+      var j = 0;
+      while (j < cells.length) {
+        var k = j;
+        while (k + 1 < cells.length && cells[k + 1] === cells[k] + 1) k++;
+        var S0 = cells[j] * C, S1 = (cells[k] + 1) * C, pieces = [];
+        var cur = { a: S0, b: S0, lo: Infinity, hi: -Infinity }, prev = null;
+        for (var s = S0 + 0.25; s < S1; s += 0.5) {
+          var h = g(s);
+          if (prev !== null && (Math.abs(h - prev) > 0.15 || Math.max(cur.hi, h) - Math.min(cur.lo, h) > 0.9)) {
+            cur.b = s - 0.25; pieces.push(cur);
+            cur = { a: s - 0.25, b: s - 0.25, lo: Infinity, hi: -Infinity };
+          }
+          cur.lo = Math.min(cur.lo, h); cur.hi = Math.max(cur.hi, h); prev = h;
+        }
+        cur.b = S1; pieces.push(cur);
+        /* short pieces take the height of the longer one they join */
+        for (var q = 0; q < pieces.length; q++) {
+          var P = pieces[q];
+          if (P.b - P.a >= 3.4 || pieces.length < 2) continue;
+          var into = q > 0 ? pieces[q - 1] : pieces[q + 1];
+          into.a = Math.min(into.a, P.a); into.b = Math.max(into.b, P.b);
+          pieces.splice(q, 1); q--;
+        }
+        emit(E, pieces, g);
+        j = k + 1;
+      }
+    }
+    return runs;
+  }
+  NZ.on('streetSideCordon', function (api) {
+    if (!AR || !api || typeof api.barrierRun !== 'function') return;
+    var runs = fenceRuns(api), n = 0;
+    for (var i = 0; i < runs.length; i++) {
+      var R = runs[i];
+      try { api.barrierRun(R.a0, R.a1, R.c, R.axis, R.y, R.near, R.g); n++; } catch (err) { netError(err, 'fence'); }
+    }
+    FENCE.runs = n;
+    FENCE.list = runs.map(function (r) { return [r.axis, r.c, +r.a0.toFixed(1), +r.a1.toFixed(1), +r.y.toFixed(2), r.near]; });
+  });
+  var FENCE = { runs: 0, list: [] };
 
   function giveLoadout() {
     for (var i = 0; i < player.has.length; i++) player.has[i] = !!LOAD_HAS[i];
@@ -611,29 +881,37 @@
   }
 
   /* ================================================== remote gunfire == */
-  function sendFire(w, rays) {
+  function r3(v) { return Math.round(v * 1000) / 1000; }
+  function sendFire(w, rays, org, dmg) {
     var e = [];
-    for (var i = 0; i < rays.length; i++) e.push([Math.round(rays[i][0] * 100) / 100, Math.round(rays[i][1] * 100) / 100, Math.round(rays[i][2] * 100) / 100, rays[i][3]]);
+    for (var i = 0; i < rays.length; i++) e.push([r3(rays[i][0]), r3(rays[i][1]), r3(rays[i][2]), rays[i][3]]);
     var q = 0;
     try { q = player.suppressed && WPN[w] && WPN[w].canSuppress ? 1 : 0; } catch (x) { }
-    broadcastState(JSON.stringify({ t: 'f', w: w, q: q, e: e }));
+    var m = { t: 'f', w: w, q: q, e: e };
+    if (org) { m.o = [r3(org[0]), r3(org[1]), r3(org[2])]; m.d = Math.round(fin(dmg) * 100) / 100; }
+    broadcastEvent(m);
   }
 
-  var _v1 = null, _v2 = null;
+  var _v1 = null;
   function onFire(pr, m) {
+    var W = null;
+    try { W = WPN[m.w | 0]; } catch (e) { }
+    if (!W) return;
+    /* the level is not built yet: keep the impacts for when it is */
+    if (!READY) { if (LATE.fires.length < 300) LATE.fires.push(m); return; }
     var who = pr;
     if (typeof m.b === 'number') {
-      /* a bot's shot, from the browser that runs it */
-      if (!teamMode() || pr.id !== ROUND.auth) return;
-      who = BOTS['#b' + (m.b | 0)];
-      if (!who) return;
+      /* a bot's shot, from the browser that runs it. Its impacts count even
+         before this page knows that browser runs the match: a pane is a
+         pane whoever shot it. */
+      who = (teamMode() && pr.id === ROUND.auth) ? (BOTS['#b' + (m.b | 0)] || null) : null;
     }
-    who.firedAt = nowS();
-    drawFire(who, m);
+    if (who) { who.firedAt = nowS(); drawFire(who, m); }
+    fireImpacts(m, who);
   }
   /* what a shot looks and sounds like from outside: the figure kicks, the
-     report, tracers to where the rounds went, a puff or blood where they
-     landed */
+     report, tracers to where the rounds went, blood where one hit a body
+     (a wall's puff comes with its impact, below) */
   function drawFire(pr, m) {
     var av = pr.av;
     if (!av || !pr.shown) return;
@@ -642,7 +920,7 @@
     if (!W) return;
     av.shot();
     try { sfx(m.q ? 'rifleq' : W.snd, av.P.x, av.P.z); } catch (e) { }
-    if (!_v1) { _v1 = new THREE.Vector3(); _v2 = new THREE.Vector3(); }
+    if (!_v1) _v1 = new THREE.Vector3();
     var mz = av.muzzle();
     var ox = mz ? mz.x : av.P.x, oy = mz ? mz.y : av.P.y + av.P.eyeH - 0.3, oz = mz ? mz.z : av.P.z;
     var ends = Array.isArray(m.e) ? m.e : [];
@@ -651,17 +929,156 @@
       if (!Array.isArray(e2) || e2.length < 3) continue;
       var ex = fin(e2[0]), ey = fin(e2[1]), ez = fin(e2[2]);
       if (i < 4) { try { tracer(ox, oy, oz, ex, ey, ez, 1.0, 0.78, 0.42, 0.06); } catch (e) { } }
-      /* the puff where it landed, unless it landed in a player */
-      if (!e2[3]) {
-        try {
-          _v1.set(ex, ey, ez); _v2.set(ex - ox, ey - oy, ez - oz).normalize();
-          var surf = impactSurface(_v1, _v2);
-          impactPuff(_v1.clone(), _v2.clone(), surf && surf.kind ? surf.kind : 'concrete');
-        } catch (e) { }
-      } else {
-        try { _v1.set(ex, ey, ez); bloodBurst(_v1.clone(), 4); } catch (e) { }
-      }
+      if (e2[3] === 1) { try { _v1.set(ex, ey, ez); bloodBurst(_v1.clone(), 4); } catch (e) { } }
     }
+  }
+  /* every round of a shot that ended on a wall (flag 0; 1 is a body, 2 ran
+     out of range), from the shooter's own origin when the shot carries it */
+  function fireImpacts(m, who) {
+    var o = Array.isArray(m.o) && m.o.length === 3 ? m.o : null;
+    if (!o && who && who.av && who.shown) {
+      var mz = who.av.muzzle();
+      if (mz) o = [mz.x, mz.y, mz.z];
+    }
+    if (!o) return;
+    var W = null;
+    try { W = WPN[m.w | 0]; } catch (e) { }
+    var dmg = fin(m.d, (W && W.dmg) || 12);
+    var ends = Array.isArray(m.e) ? m.e : [];
+    for (var i = 0; i < ends.length && i < 12; i++) {
+      var e2 = ends[i];
+      if (Array.isArray(e2) && e2.length >= 3 && !e2[3]) replayImpact(o, fin(e2[0]), fin(e2[1]), fin(e2[2]), dmg);
+    }
+  }
+
+  /* A round that hit a wall on the shooter's screen hits it here too, through
+     the same surfaceHit hook, with the same origin, direction and damage: a
+     crate loses the same hit points, a pane cracks the same cells, a car
+     window breaks on the same round. What nobody owns falls back to the
+     stock puff, decal and sound, exactly like hitscan(). */
+  function replayImpact(from, ex, ey, ez, dmg) {
+    try {
+      var hit = new THREE.Vector3(ex, ey, ez);
+      var org = new THREE.Vector3(fin(from[0]), fin(from[1]), fin(from[2]));
+      var dir = hit.clone().sub(org), t = dir.length();
+      if (!(t > 0.01)) return;
+      dir.multiplyScalar(1 / t);
+      var surface = impactSurface(hit, dir);
+      var owned = false;
+      try { owned = NZ.first('surfaceHit', hit, dir, surface, { org: org, dmg: dmg, bestT: t, remote: true }) === true; }
+      catch (e) { owned = false; }
+      if (!owned) {
+        impactPuff(hit, dir, surface.kind); impactDecal(hit, dir, surface);
+        sfx('impact_' + surface.kind, hit.x, hit.z);
+      }
+      ME.replayed++;
+    } catch (err) { netError(err, 'impact'); }
+  }
+
+  /* ===================================================== late arrivals == */
+  /* Someone who opens the link mid-match has a pristine city. When a direct
+     link opens, each side sends what it has broken; each side keeps the
+     worse of the two, pane by pane and crate by crate, so both end up with
+     the union. Car windows have no snapshot of their own: they are hit until
+     they reach the stage the sender has. */
+  function damageSnapshot() {
+    var Dm = NZ.destruct;
+    if (!READY || !Dm || !Dm.ok || typeof Dm.snapshot !== 'function') return null;
+    var s = Dm.snapshot(), out = { t: 'ds', b: s.broken || [], c: [], g: [], cg: [] };
+    /* every live crate: a few dozen short rows, and the receiver keeps the
+       lower hit points of the two */
+    for (var i = 0; i < (s.crates || []).length; i++) {
+      var c = s.crates[i];
+      out.c.push([c.cx, c.cy, Math.round(c.hp * 10) / 10, c.bruised ? 1 : 0]);
+    }
+    for (var j = 0; j < (s.glass || []).length; j++) {
+      var g = s.glass[j];
+      if (g.stage > 0) out.g.push([j, g.id, g.stage, r3(g.energy), (g.impacts || []).map(function (im) { return [r3(im.u), r3(im.v)]; }), g.removed || []]);
+    }
+    try {
+      if (Dm.carGlass && Dm.carGlass.states) {
+        var cs = Dm.carGlass.states();
+        for (var k = 0; k < cs.length; k++) if (cs[k] && (cs[k].stage > 0 || cs[k].broken)) out.cg.push([k, cs[k].stage, cs[k].broken ? 1 : 0]);
+      }
+    } catch (e) { }
+    var str = JSON.stringify(out);
+    if (str.length > 240000) {           /* a whole facade shot out: send the stages only */
+      for (var q = 0; q < out.g.length; q++) out.g[q][5] = [];
+      str = JSON.stringify(out);
+    }
+    return str.length > 240000 ? null : str;
+  }
+  function sendDamage(pr) {
+    try {
+      var s = damageSnapshot();
+      if (s && pr.chE && pr.chE.readyState === 'open') pr.chE.send(s);
+    } catch (err) { netError(err, 'snapshot'); }
+  }
+
+  function onDamage(m) {
+    if (!READY) { LATE.snap = LATE.snap ? LATE.snap.concat([m]) : [m]; return; }
+    var Dm = NZ.destruct;
+    if (!Dm || !Dm.ok || typeof Dm.snapshot !== 'function' || typeof Dm.restore !== 'function') return;
+    try {
+      var s = Dm.snapshot(), changed = false, i;
+      var brokenKey = {};
+      for (i = 0; i < s.broken.length; i++) brokenKey[s.broken[i][0] + ',' + s.broken[i][1]] = 1;
+      var crateAt = {};
+      for (i = 0; i < s.crates.length; i++) crateAt[s.crates[i].cx + ',' + s.crates[i].cy] = s.crates[i];
+      /* crates: broken anywhere is broken; otherwise the lower hit points */
+      var b = Array.isArray(m.b) ? m.b : [];
+      for (i = 0; i < b.length; i++) {
+        if (!Array.isArray(b[i])) continue;
+        var bk = (b[i][0] | 0) + ',' + (b[i][1] | 0);
+        if (brokenKey[bk] || !crateAt[bk]) continue;
+        brokenKey[bk] = 1; s.broken.push([b[i][0] | 0, b[i][1] | 0]); delete crateAt[bk]; changed = true;
+      }
+      s.crates = s.crates.filter(function (c) { return !!crateAt[c.cx + ',' + c.cy]; });
+      var cr = Array.isArray(m.c) ? m.c : [];
+      for (i = 0; i < cr.length; i++) {
+        var row = cr[i]; if (!Array.isArray(row)) continue;
+        var rec = crateAt[(row[0] | 0) + ',' + (row[1] | 0)];
+        if (!rec) continue;
+        var hp = fin(row[2], rec.hp);
+        if (hp < rec.hp) { rec.hp = Math.max(1, hp); changed = true; }
+        if (row[3] && !rec.bruised) { rec.bruised = true; changed = true; }
+      }
+      /* panes: the further-gone pane wins whole */
+      var gl = Array.isArray(m.g) ? m.g : [];
+      for (i = 0; i < gl.length; i++) {
+        var G = gl[i]; if (!Array.isArray(G) || G.length < 6) continue;
+        var mine = s.glass[G[0] | 0];
+        if (!mine || mine.id !== G[1] || !(G[2] > mine.stage)) continue;
+        s.glass[G[0] | 0] = {
+          id: mine.id, stage: G[2] | 0, energy: fin(G[3]),
+          impacts: (Array.isArray(G[4]) ? G[4] : []).map(function (p) { return { u: fin(p[0]), v: fin(p[1]) }; }),
+          removed: Array.isArray(G[5]) ? G[5].filter(function (n) { return Number.isInteger(n); }) : []
+        };
+        changed = true;
+      }
+      if (changed && !Dm.restore(s)) warn('damage snapshot refused');
+      /* car windows: hit them until they are as far gone as the sender's */
+      var cg = Array.isArray(m.cg) ? m.cg : [];
+      if (cg.length && Dm.carGlass && Dm.carGlass.state && Dm.carGlass.damage) {
+        for (i = 0; i < cg.length; i++) {
+          var C2 = cg[i]; if (!Array.isArray(C2)) continue;
+          for (var n = 0; n < 12; n++) {
+            var st = Dm.carGlass.state(C2[0] | 0);
+            if (!st || st.broken || (!C2[2] && st.stage >= C2[1])) break;
+            Dm.carGlass.damage(C2[0] | 0, 1, 16);
+          }
+        }
+      }
+      ME.snapsIn++;
+    } catch (err) { netError(err, 'snapshot-in'); }
+  }
+
+  /* the level is up: what arrived while it loaded */
+  function drainLate() {
+    var snaps = LATE.snap; LATE.snap = null;
+    if (snaps) for (var i = 0; i < snaps.length; i++) onDamage(snaps[i]);
+    var f = LATE.fires; LATE.fires = [];
+    for (var j = 0; j < f.length; j++) fireImpacts(f[j], null);
   }
 
   /* ============================================================ avatars == */
@@ -868,6 +1285,8 @@
     pr.open = true;
     pr.retries = 0;
     sendEvent(pr, { t: 'hi', name: ME.name, color: ME.color, frags: ME.frags, deaths: ME.deaths, proto: PROTO, j: ME.j, tw: ME.want, in: ME.inMatch ? 1 : 0 });
+    /* what is already broken here; a page still loading has nothing to say */
+    sendDamage(pr);
     hudDirty = true;
     refreshLobby();
   }
@@ -892,9 +1311,13 @@
   }
 
   function onEventMsg(pr, data) {
-    if (typeof data !== 'string' || data.length > 8192) return;
+    if (typeof data !== 'string' || data.length > 262144) return;
+    /* only the damage snapshot is ever big */
+    if (data.length > 8192 && data.lastIndexOf('{"t":"ds"', 0) !== 0) return;
     var m; try { m = JSON.parse(data); } catch (e) { return; }
     if (!m || typeof m.t !== 'string') return;
+    if (m.t === 'f') { onFire(pr, m); return; }
+    if (m.t === 'ds') { onDamage(m); return; }
     if (m.t === 'hi') {
       var first = !pr.saidHi;
       pr.saidHi = true;
@@ -924,7 +1347,8 @@
     else if (m.t === 'r') onRound(pr, m);
   }
 
-  /* binary state, pings, and the gunfire JSON all ride the fast channel */
+  /* binary state and pings ride the fast channel (and gunfire JSON from an
+     older page, if one ever sends it there) */
   var SBUF = new ArrayBuffer(48), SDV = new DataView(SBUF);
   var PBUF = new ArrayBuffer(12), PDV = new DataView(PBUF);
 
@@ -1533,9 +1957,17 @@
       if (rayParts(org, dir.x, dir.y, dir.z, bt, a.x, a.y, a.z, parts)) { best = a; bt = RAY.t; bz = RAY.zone; }
     }
     var e = BOTS['#b' + sim.slot];
-    var m = { t: 'f', b: sim.slot, w: w | 0, q: 0, e: [[r2(org.x + dir.x * bt), r2(org.y + dir.y * bt), r2(org.z + dir.z * bt), best ? 1 : 0]] };
-    broadcastState(JSON.stringify(m));
+    var nowhere = !best && !(bt < range - 0.1);
+    var m = {
+      t: 'f', b: sim.slot, w: w | 0, q: 0,
+      e: [[r3(org.x + dir.x * bt), r3(org.y + dir.y * bt), r3(org.z + dir.z * bt), best ? 1 : nowhere ? 2 : 0]],
+      o: [r3(org.x), r3(org.y), r3(org.z)],
+      d: Math.round(fin(W.dmg, 12) * fin(sim.skill && sim.skill.dmg, 1) * 100) / 100
+    };
+    broadcastEvent(m);
     if (e) { e.firedAt = nowS(); drawFire(e, m); }
+    /* no hitscan() ran for it here either: its wall impact, on this screen */
+    if (!best && !nowhere) fireImpacts(m, null);
     if (!best || ROUND.ph !== 'live') return;
     var d = fin(W.dmg, 12) * (ZONE_MULT[bz] || 1) * fin(sim.skill && sim.skill.dmg, 1);
     var head = bz === 'head', by = '#b' + sim.slot;
@@ -1722,9 +2154,14 @@
       /* Y is the museum key in single player and makes the player immune;
          in a match nobody gets to be a statue */
       try { if (inspectMode) inspectMode = false; } catch (e) { }
+      if (AR && player.alive && !ME.spec) keepInArena();
       if (t - ME.sendT >= SEND_MIN) sendStateNow();
       if (!player.alive && ME.respawnAt && t >= ME.respawnAt) respawn();
+      govFrame(dt, t);
     }
+    /* what came in while the level loaded, once nz-destruct has its glass */
+    if (READY && (LATE.snap || LATE.fires.length) &&
+        ((NZ.destruct && NZ.destruct.ok) || t - ME.readyT > 3) && t - ME.readyT > 0.75) drainLate();
     if (t - ME.pingT >= PING_EVERY) { ME.pingT = t; pingAll(); }
     for (var id in PEERS) {
       var pr = PEERS[id];
@@ -1734,6 +2171,102 @@
     }
     if (teamMode()) teamFrame(t, dt);
     if (t - ME.hudT > 0.25 || hudDirty) { ME.hudT = t; drawHud(); }
+  }
+
+  /* canStand() holds the fence; this is the net under it, for anything that
+     moves the player without asking it (a knock-back, a respawn bug) */
+  function keepInArena() {
+    var cx = Math.floor(player.x / CELL), cy = Math.floor(player.z / CELL);
+    if (arenaIn(cx, cy)) { ME.good = [player.x, player.y, player.z]; return; }
+    ME.fenced++;
+    if (ME.good) { player.x = ME.good[0]; player.y = ME.good[1]; player.z = ME.good[2]; player.vy = 0; }
+    else respawn();
+  }
+
+  /* ================================================== frame governor == */
+  /* nz-render's ladder sheds post effects when frames run long, and stops
+     once cutting them buys nothing -- which is exactly the machine that is
+     paying for pixels: a laptop's integrated GPU at 1.5x on a big street.
+     In a match frames are aim, so this goes one step further, only after the
+     ladder is done (locked, pinned or out of rungs): the pixel ratio to 1 on
+     a high-DPI desktop, then the scene scale down in two steps. A step that
+     buys less than 8% is undone and the governor stops there; three fast
+     windows in a row give a step back, and one that does not hold is not
+     tried again for a minute and a half. ?nzgov=0 turns it off. */
+  var GOV = {
+    off: routeParam('nzgov') === '0',
+    steps: null, step: 0, hist: [], t0: 0, prevMed: 0, checking: false, probation: false,
+    locked: false, good: 0, upBlock: 0, last: null, lastNow: 0, med: 0
+  };
+  var GOV_SLOW = 28, GOV_FAST = 15.5, GOV_GAIN = 0.92, GOV_WIN = 1.6;
+  function govSteps() {
+    var s = [{ dpr: 0, mul: 1 }];
+    var phone = !!(NZ.touch && NZ.touch.phone);     /* nz-touch owns its dprCap */
+    var dp = 1;
+    try { dp = renderer.getPixelRatio(); } catch (e) { dp = global.devicePixelRatio || 1; }
+    var hiDpi = !phone && dp > 1.05;
+    if (hiDpi) s.push({ dpr: 1, mul: 1 });
+    if (NZ.flags && NZ.flags.render && NZ.render && NZ.render.setScale) {
+      s.push({ dpr: hiDpi ? 1 : 0, mul: 0.85 });
+      s.push({ dpr: hiDpi ? 1 : 0, mul: 0.72 });
+    }
+    return s;
+  }
+  function govApply(i) {
+    var S = GOV.steps[i]; if (!S) return;
+    GOV.step = i;
+    try {
+      if (!(NZ.touch && NZ.touch.phone)) {
+        if (S.dpr) NZ.dprCap = S.dpr; else delete NZ.dprCap;
+        if (typeof resize === 'function') resize();
+      }
+    } catch (e) { }
+    try { if (NZ.render && NZ.render.setScale) NZ.render.setScale(S.mul); } catch (e) { }
+    GOV.hist.length = 0; GOV.t0 = 0;
+    GOV.last = { step: i, at: +nowS().toFixed(1) };
+  }
+  function ladderDone() {
+    try {
+      var st = NZ.render && NZ.render.stats;
+      if (!st) return true;
+      return st.locked || st.pinned || st.degrade >= 4;
+    } catch (e) { return true; }
+  }
+  function govFrame(dt, t) {
+    /* the game hands hooks a dt clamped to 50 ms, which would hide the very
+       difference a cut makes on a 10-20 fps machine: time the frames here */
+    var now = performance.now(), ms = GOV.lastNow ? now - GOV.lastNow : 0;
+    GOV.lastNow = now;
+    if (GOV.off || GOV.fed || document.hidden) { GOV.lastNow = 0; return; }
+    govSample(ms, t);
+  }
+  function govSample(ms, t) {
+    if (!GOV.steps) GOV.steps = govSteps();
+    if (GOV.steps.length < 2 || !(ms > 0) || ms > 1000) return;   /* over 1 s: a hitch */
+    var h = GOV.hist;
+    h.push(ms);
+    if (!GOV.t0) GOV.t0 = t;
+    if (h.length < 40 || t - GOV.t0 < GOV_WIN) return;
+    var srt = h.slice().sort(function (a, b) { return a - b; }), med = srt[srt.length >> 1];
+    h.length = 0; GOV.t0 = t; GOV.med = Math.round(med * 10) / 10;
+    if (GOV.checking) {                      /* did that cut buy anything? */
+      GOV.checking = false;
+      if (med > GOV.prevMed * GOV_GAIN) { GOV.locked = true; govApply(GOV.step - 1); return; }
+    }
+    if (GOV.probation) {                     /* did that step back hold? */
+      GOV.probation = false;
+      if (med > GOV_SLOW) { GOV.upBlock = t + 90; govApply(GOV.step + 1); return; }
+    }
+    if (med > GOV_SLOW && !GOV.locked && GOV.step < GOV.steps.length - 1 && ladderDone()) {
+      GOV.prevMed = med; GOV.checking = true; GOV.good = 0;
+      govApply(GOV.step + 1);
+      return;
+    }
+    if (med < GOV_FAST && GOV.step > 0 && t > GOV.upBlock) {
+      if (++GOV.good >= 3) { GOV.good = 0; GOV.probation = true; GOV.locked = false; govApply(GOV.step - 1); }
+      return;
+    }
+    GOV.good = 0;
   }
 
   /* a hidden tab gets no animation frames: keep saying we are here */
@@ -1906,6 +2439,8 @@
       '#nzLobby .seg .mini.on{background:linear-gradient(180deg,#c9861a,#6a3a06);color:#fff;border-color:#ffe6a8}' +
       '#nzLobby .seg .mini:disabled{opacity:.4}' +
       '#nzLobby .row.pair{gap:1vw;flex-wrap:wrap}' +
+      '#nzLobby #nzMapName{color:#ffdb78;font-weight:800;letter-spacing:.18em;font-size:clamp(11px,1.6vh,17px)}' +
+      '#nzLobby .nzmaps{margin-top:0}' +
       '#nzSpec{position:absolute;left:0;right:0;bottom:15vh;display:none;text-align:center;pointer-events:none;' +
       'font-size:clamp(12px,2vh,20px);font-weight:800;letter-spacing:.18em;color:#ffdb78;text-shadow:0 2px 2px #000,0 0 8px #000}' +
       '#nzTags{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none}' +
@@ -1936,6 +2471,8 @@
       '<button class="btn mini" id="nzCopy" type="button">KOPYALA</button></div>' +
       '<div class="row"><span class="lbl">ADIN</span><input id="nzName" maxlength="16" spellcheck="false"></div>' +
       '<div class="row pair" id="nzModeRow"><span class="lbl">MOD</span><span class="seg" id="nzModeSeg"></span></div>' +
+      '<div class="row" id="nzMapRow"><span class="lbl">HARİTA</span><span id="nzMapName"></span>' +
+      '<button class="btn mini" id="nzMapChange" type="button">DEĞİŞTİR</button></div>' +
       '<div class="row pair" id="nzTeamRow"><span class="lbl">TAKIMIN</span><span class="seg" id="nzTeamSeg"></span>' +
       '<span class="lbl">BOTLAR</span><span class="seg" id="nzBotSeg"></span></div>' +
       '<div id="nzPlayers"></div>' +
@@ -1946,6 +2483,13 @@
        (Enter there starts the game) */
     box.addEventListener('keydown', function (e) { e.stopPropagation(); });
     seg('nzModeSeg', [['team', 'TAKIM ' + TEAM_SIZE + 'v' + TEAM_SIZE + ' + BOT'], ['dm', 'HERKES TEK']], switchMode);
+    $('nzMapName').textContent = MAP.name || mname;
+    var picker = mapPicker('nzMaps', ROUTE_LEVEL, function (level) {
+      if (level === ROUTE_LEVEL) { picker.classList.remove('on'); return; }
+      switchMap(level);
+    });
+    box.insertBefore(picker, $('nzMapRow').nextSibling);
+    $('nzMapChange').onclick = function () { picker.classList.toggle('on'); };
     seg('nzTeamSeg', [[-1, 'FARK ETMEZ'], [0, TEAMS[0].name], [1, TEAMS[1].name]], setWant);
     seg('nzBotSeg', [['easy', SKILL_NAMES.easy], ['normal', SKILL_NAMES.normal], ['hard', SKILL_NAMES.hard]], setSkill);
     var link = $('nzLink'); link.value = inviteUrl();
@@ -2026,6 +2570,7 @@
         'Arkadaşını çağırmak için aşağıdaki bağlantıyı gönder: tıklaması yeterli.'
         : 'Ölüm maçı, en fazla ' + ROOM_MAX + ' oyuncu. Aşağıdaki bağlantıyı bir arkadaşına gönder: tıklaması yeterli, maça girer.<br>' +
         'Düşman yok, toplanacak eşya yok &mdash; herkes aynı silahlarla başlar ve öldükten 3 saniye sonra yeniden doğar.';
+      if (MAP.rects) brief.innerHTML += ' Maç, polis bariyerleriyle çevrili kavşakta geçer.';
     }
     var link = $('nzLink'); if (link) link.value = inviteUrl();
     var tr = $('nzTeamRow'); if (tr) tr.style.display = team ? '' : 'none';
@@ -2090,6 +2635,16 @@
        still holds would hand the old mode straight back */
     setTimeout(function () { global.location.reload(); }, 400);
   }
+  /* The map, likewise: alone and not yet in the match, come back into the
+     same room under the other mission (a link already sent follows it). */
+  function switchMap(level) {
+    if (level === ROUTE_LEVEL || ME.inMatch || !mapFor(level)) return;
+    for (var id in PEERS) return;
+    NET.active = false;
+    try { if (SIG.ws) { SIG.fatal = true; SIG.ws.close(); } } catch (e) { }
+    global.location.hash = 'mp=' + ROOM + '&level=' + level + (teamMode() ? '' : '&mode=dm');
+    setTimeout(function () { global.location.reload(); }, 400);
+  }
   function sideColor(team, want, color) {
     if (!teamMode()) return COLORS[color % COLORS.length];
     var s = team >= 0 ? team : want;
@@ -2149,6 +2704,9 @@
     var others = false;
     for (var q in PEERS) { others = true; break; }
     segMark('nzModeSeg', MODE, others || ME.inMatch);
+    var chg = $('nzMapChange');
+    if (chg) chg.style.display = (others || ME.inMatch) ? 'none' : '';
+    if (others || ME.inMatch) { var pk = $('nzMaps'); if (pk) pk.classList.remove('on'); }
     segMark('nzTeamSeg', ME.want, false);
     var lock = skillLocked(), sk = lock ? ROUND.sk : SKILL;
     segMark('nzBotSeg', sk, lock);
@@ -2216,6 +2774,7 @@
   var READY = false;
   NZ.on('ready', function () {
     READY = true;
+    ME.readyT = nowS();
     try { buildLobby(); } catch (err) { netError(err, 'lobby'); }
   });
   try { sigConnect(); } catch (err) { netError(err, 'connect'); }
@@ -2246,6 +2805,26 @@
     return out;
   };
   NET.spawnPoints = function () { return SPAWN_PTS.slice(); };
+  NET.map = function () { return { level: MAP.level, name: MAP.name, fenced: !!AR }; };
+  NET.arena = function () {
+    var n = 0;
+    if (AR) for (var i = 0; i < AR.length; i++) n += AR[i];
+    return { fenced: !!AR, cells: n, fenceRuns: FENCE.runs, fence: FENCE.list.slice(), pulledBack: ME.fenced };
+  };
+  NET.inArena = function (x, z) { return arenaIn(Math.floor(x / CELL), Math.floor(z / CELL)); };
+  NET.gfx = function () {
+    var st = null; try { st = NZ.render && NZ.render.stats; } catch (e) { }
+    var ratio = 0; try { ratio = renderer.getPixelRatio(); } catch (e) { }
+    return { off: GOV.off, step: GOV.step, steps: GOV.steps ? GOV.steps.slice() : null, locked: GOV.locked, last: GOV.last, frameMs: GOV.med,
+      dprCap: NZ.dprCap || null, ratio: ratio, scale: st ? st.scale : null, degrade: st ? st.degrade : null, ladderLocked: st ? st.locked : null };
+  };
+  /* tests: drive the governor with n frames of `ms` each, in its own time */
+  NET.govFeed = function (ms, n) {
+    GOV.fed = true; GOV.fakeT = GOV.fakeT || nowS();
+    for (var i = 0; i < (n | 0); i++) { GOV.fakeT += ms / 1000; govSample(ms, GOV.fakeT); }
+    return NET.gfx();
+  };
+  NET.damage = function () { return { replayed: ME.replayed, snapshotsIn: ME.snapsIn, waiting: LATE.fires.length + (LATE.snap ? LATE.snap.length : 0) }; };
   NET.status = function () { return { status: SIG.status, msg: SIG.msg, host: HOST_ID, max: ROOM_MAX, errors: ERR }; };
   NET.peerHitParts = function (id) { var pr = PEERS[id] || BOTS[id]; return pr && pr.av ? pr.av.hitParts([]).map(function (p) { return Object.assign({}, p); }) : []; };
   NET.mode = function () { return MODE; };

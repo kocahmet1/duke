@@ -27,7 +27,12 @@
          round again with a bot beside him, and the bots carry on
    and fails on any console error from the game.
 
+   With --level 4 the room plays ABLUKA, the fenced corner of Mission 4, and
+   between 3 and 4 it also watches the bots for 8 s: every seat dealt and
+   every place a bot walks has to be inside the fence.
+
      node scripts/team-smoke.mjs
+     node scripts/team-smoke.mjs --level 4
      CHROME=/path/to/chrome node scripts/team-smoke.mjs
 
    Software rendering would hold the bots to a frame or two a second, so
@@ -44,10 +49,13 @@ import puppeteer from 'puppeteer-core';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
 const PORT = 4300 + Math.floor(Math.random() * 500);
+const argv = process.argv.slice(2);
+const LEVEL = argv.includes('--level') && parseInt(argv[argv.indexOf('--level') + 1], 10) === 4 ? 4 : 2;
 const roomCode = () => 'T' + Math.random().toString(36).slice(2, 7).toUpperCase().replace(/[^A-Z0-9]/g, 'Q');
 const CHROME = process.env.CHROME || [
   '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
   '/tmp/chs/chrome-headless-shell-linux64/chrome-headless-shell',
+  '/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell',
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
 ].find(p => { try { return fs.statSync(p).isFile(); } catch { return false; } });
 
@@ -82,7 +90,7 @@ srv.stdout.on('data', d => { srvLog += d; });
 srv.stderr.on('data', d => { srvLog += d; });
 for (let i = 0; i < 40 && !/multiplayer server on/.test(srvLog); i++) await sleep(100);
 if (!/multiplayer server on/.test(srvLog)) { console.error(srvLog); process.exit(2); }
-say(`server on :${PORT}`);
+say(`server on :${PORT}, mission ${LEVEL}`);
 
 const browser = await puppeteer.launch({
   executablePath: CHROME, headless: true, protocolTimeout: 900000,
@@ -102,7 +110,7 @@ async function openPage(name, room) {
   page.on('pageerror', e => errors.push(`${name}: ${e.message}`));
   page.on('response', r => { if (r.status() >= 400) errors.push(`${name}: HTTP ${r.status()} ${r.url()}`); });
   await page.evaluateOnNewDocument(n => { try { localStorage.setItem('nuke-zone-3d:mp-name:v1', n); } catch (e) { } }, name);
-  await page.goto(`http://127.0.0.1:${PORT}/NUKEM.html?nzq=low#mp=${room}&level=2`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.goto(`http://127.0.0.1:${PORT}/NUKEM.html?nzq=low#mp=${room}&level=${LEVEL}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await waitFor(page, () => typeof state !== 'undefined' && state.booted, 240000, `${name} boot`);
   await waitFor(page, () => window.NZ && NZ.net && NZ.net.me().welcomed, 60000, `${name} welcome`);
   await helpers(page);
@@ -250,6 +258,28 @@ try {
   const p1 = await A.evaluate(() => NZ.net.bots().map(b => [b.sim.x, b.sim.z]));
   const moved = p0.map((a, i) => Math.hypot(a[0] - p1[i][0], a[1] - p1[i][1]));
   check(moved.every(d => d > 12), `the bots leave their bases (${moved.map(d => d.toFixed(0)).join(', ')} units in 4.5 s)`);
+
+  /* 3b. ABLUKA: the seats and everywhere the bots go stay inside the fence */
+  if (LEVEL === 4) {
+    const fence = await A.evaluate(() => ({ a: NZ.net.arena(), seats: NZ.net.round().ro.every(r => r.sp && NZ.net.inArena(r.sp.x, r.sp.z)) }));
+    check(fence.a.fenced && fence.a.fenceRuns >= 10 && fence.seats, `ABLUKA: ${fence.a.fenceRuns} fence runs, every seat inside`);
+    const walk = await A.evaluate(async () => {
+      let n = 0, out = 0, far = 0, worst = '';
+      const start = NZ.net.bots().map(b => [b.sim.x, b.sim.z]);
+      for (let k = 0; k < 32; k++) {
+        for (const b of NZ.net.bots()) {
+          if (!b.sim || !b.sim.alive) continue;
+          n++;
+          if (!NZ.net.inArena(b.sim.x, b.sim.z)) { out++; worst = b.name + ' at ' + b.sim.x.toFixed(0) + ',' + b.sim.z.toFixed(0); }
+        }
+        await new Promise(r => setTimeout(r, 250));
+      }
+      const end = NZ.net.bots().map(b => [b.sim.x, b.sim.z]);
+      for (let i = 0; i < Math.min(start.length, end.length); i++) far = Math.max(far, Math.hypot(end[i][0] - start[i][0], end[i][1] - start[i][1]));
+      return { n, out, far, worst };
+    });
+    check(walk.n > 40 && walk.out === 0 && walk.far > 10, `ABLUKA: ${walk.n} bot positions over 8 s, ${walk.out} outside the fence${walk.worst ? ' (' + walk.worst + ')' : ''}; the furthest went ${walk.far.toFixed(0)} units`);
+  }
 
   /* 4. the player kills an enemy bot; his own bot cannot be hurt */
   for (const f of foes) await A.evaluate(id => window.__t.bot(id, { holdT: 1e6 }), f.id);

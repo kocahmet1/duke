@@ -2493,6 +2493,19 @@ function buildAll() {
   runStage('buildFurniture', typeof buildFurniture === 'function' ? buildFurniture : null);
   runStage('buildTerminus', typeof buildTerminus === 'function' ? buildTerminus : null);
   runStage('buildCordon',   typeof buildCordon   === 'function' ? buildCordon   : null);
+  runStage('buildExtraCordon', buildExtraCordon);
+}
+
+/* Other modules may stand more bariyer runs on the street before it is
+   merged: nz-net.js fences the multiplayer arena on this map with them.
+   They get the same builder the police lines use, so the panels join the
+   piles above -- the same bake and tone, and no extra meshes. */
+function buildExtraCordon() {
+  if (!NZ.has || !NZ.has('streetSideCordon')) return;
+  NZ.call('streetSideCordon', {
+    barrierRun: barrierRun, armGroundY: cdArmGroundY,
+    ROAD_TOP: ROAD_TOP, PAVE_TOP: PAVE_TOP, KERB_TOP: KERB_TOP, ROAD0: ROAD0, ROAD1: ROAD1
+  });
 }
 
 /* our own facade records, in nz-street.js's shape, for future consumers.
