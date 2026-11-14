@@ -1,11 +1,13 @@
 /* ===========================================================================
    NZ-AUDIO  --  CS2-grade sound subsystem for NUKEM.
 
-   Classic script. No modules, no fetch, no sample files. Every waveform in
-   this file is computed at runtime: the noise beds, the impulse responses,
-   and - new in this revision - a bank of physically-modelled muzzle-blast,
-   ballistic-crack, footstep and casing transients rendered sample-by-sample
-   into AudioBuffers at first use.
+   Classic script. No modules, no fetch. Every waveform in this file is
+   computed at runtime: the noise beds, the impulse responses, and a bank of
+   physically-modelled muzzle-blast, ballistic-crack, footstep and casing
+   transients rendered sample-by-sample into AudioBuffers at first use.
+   The ONE exception is section 15c: the pistol, rifle and shotgun reports
+   are real CC0 field recordings, pulled in from nz-gunshots-asset.js after
+   the page has loaded, with the synthesis kept as their fallback.
 
    Why pre-render transients at all?
      A gunshot is defined by its first 500 microseconds. You cannot get a
@@ -1825,6 +1827,11 @@
       var pk = getBQ('peaking', cl(o.peak, 40, SR * 0.45), o.peakq === undefined ? 1.1 : o.peakq, cl(o.peakg, -24, 18));
       head.connect(pk); head = pk; extra.push(['bq', pk]);
     }
+    /* low shelf: the recorded reports' first-person weight (section 15c) */
+    if (isNum(o.ls)) {
+      var lsf = getBQ('lowshelf', cl(o.ls, 30, 1000), 0.7, cl(o.lsg, -24, 18));
+      head.connect(lsf); head = lsf; extra.push(['bq', lsf]);
+    }
     if (o.drive) { var sh = getShaper(o.drive); head.connect(sh); head = sh; extra.push(['sh', sh]); }
     head.connect(g); g.connect(b.inp);
 
@@ -1832,6 +1839,14 @@
     pSet(g.gain, vol, t);
     var stop = t + dur;
     if (isNum(o.dur) && o.dur < dur) { pExp(g.gain, EPS, t + o.dur); stop = t + o.dur + 0.005; }
+    /* `cut` is not `dur`: full level until 120 ms before the cut, then out.
+       `dur` decays from the first sample, which is right for a ping and
+       wrong for a recording whose body lasts a quarter of a second. */
+    else if (isNum(o.cut) && o.cut < dur) {
+      pSet(g.gain, vol, t + Math.max(0.01, o.cut - 0.12));
+      pExp(g.gain, EPS, t + o.cut);
+      stop = t + o.cut + 0.005;
+    }
 
     var end = stop + 0.02;
     var v = track(s, g, end, o.pri === undefined ? 5 : o.pri);
@@ -2315,6 +2330,283 @@
               vol: 0.020 * v, dur: 0.028, q: 6, body: true, pri: 2 });
   }
 
+  /* =======================================================================
+     15c. recorded gunfire
+     The pistol, the rifle and the pump gun fire REAL recordings: a Walther
+     PPQ (9x19), an AR-15 (5.56x45) and a Benelli Nova (12 ga), with the pump
+     rack from a Winchester Model 12 - all from The Free Firearm Sound Library
+     by Still North Media, CC0 1.0 (no rights reserved; see
+     assets/gunshots/README.md). Each gun has a NEAR set (spaced pair beside
+     the shooter; every shot and each microphone is its own variant) and a FAR
+     set (the same gun from mid distance, the range's own echoes included).
+     They crossfade on the same b.near / b.far weights the synthesised blast
+     uses, and they go through the same newBus as everything else, so distance
+     roll-off, air absorption, occlusion, HRTF, propagation delay and the room
+     send all still apply: a recording behind a wall is as muffled and as late
+     as the synthesis was.
+
+     Cheaper than what it replaces, not dearer:
+       * a synthesised report starts 10-18 sources per shot (blast pair, live
+         body and top, sub, bolt and slide ticks, spring, tail layers), each
+         with its own filters. A recorded report is ONE source, two inside the
+         near/far crossfade band. At 9.5 rounds a second that is the bulk of
+         the audio graph churn of a firefight gone.
+       * the pistol/rifle blast banks are never needed, so primeBanks skips
+         rendering them sample by sample at startup.
+       * the clips (~670 KB, nz-gunshots-asset.js) are requested only after
+         the page's own 'load' event, so they never compete with the level for
+         bandwidth or hold up the first frame. decodeAudioData runs off the
+         main thread, one clip at a time, and the base64 text is dropped as
+         soon as the clips are decoded.
+     Until they are ready - and for good if the file is missing or a browser
+     cannot decode MP3 - every cue falls through to the synthesis below, so
+     this can only ever add sound, never lose any.
+
+     Console: NZ.audio.recordings(false) for the synthesis, (true) to go back.
+     ==================================================================== */
+  var REC = { on: true, state: 'idle', url: 'nz-gunshots-asset.js', bufs: {}, clips: 0, ms: 0 };
+  /* Clip gains. Every clip in a set was loudness-matched offline (BS.1770
+     K-weighted, first 250 ms), so one number per set is the whole mix.
+     Calibrated by rendering each cue through this exact graph - glue
+     compressor, master gain and limiter included - in an OfflineAudioContext
+     next to its synthesised version (2026-11-14): your own pistol and rifle
+     land ~1.5 dB above the synthesised ones, your own shotgun ~1.5 dB under
+     (its synthesised loudness was mostly a 63 Hz sine boom that no real
+     recording has), and far fire within 0.5 dB. The shotgun's number looks
+     big because the compressors flatten it; past ~1.6 it only squashes. */
+  var REC_GAIN = {
+    pistol: 0.432, pistolFar: 0.62,
+    rifle: 0.407, rifleFar: 0.52,
+    shotgun: 1.600, shotgunFar: 0.60,
+    pump: 0.12
+  };
+  /* Observers' share of the near set, measured rather than copied: the
+     shooter's own report runs into the glue compressor and the master
+     limiter and an enemy's 15-25 units away mostly does not, so one gain
+     cannot serve both. These put enemy fire back within ~0.5 dB of the
+     synthesised level at 15 and 25 units. */
+  var REC_OBS = { pistol: 0.91, rifle: 0.875, shotgun: 0.78 };
+
+  /* the asset lives next to this file, wherever this file was served from */
+  try {
+    var cs0 = global.document && global.document.currentScript;
+    var re0 = /nz-audio\.js(\?[^#]*)?(#.*)?$/;
+    if (cs0 && cs0.src && re0.test(cs0.src)) REC.url = cs0.src.replace(re0, 'nz-gunshots-asset.js');
+  } catch (e) {}
+
+  function recFetch() {
+    if (REC.state !== 'idle' || !REC.on || dead) return;
+    if (global.NZ_GUNSHOTS) { REC.state = 'loaded'; recDecode(); return; }
+    var d = global.document;
+    if (!d || !d.createElement) { REC.state = 'failed'; return; }
+    REC.state = 'loading';
+    try {
+      var s = d.createElement('script');
+      s.async = true;
+      s.src = REC.url;
+      s.onload = function () { REC.state = global.NZ_GUNSHOTS ? 'loaded' : 'failed'; recDecode(); };
+      s.onerror = function () { REC.state = 'failed'; NZ.log('gunshot recordings unavailable, synthesis stays'); };
+      (d.head || d.body || d.documentElement).appendChild(s);
+    } catch (e) { REC.state = 'failed'; }
+  }
+  function b64buf(s) {
+    var bin = global.atob(s), n = bin.length, u = new Uint8Array(n);
+    for (var i = 0; i < n; i++) u[i] = bin.charCodeAt(i);
+    return u.buffer;
+  }
+  /* promise and callback forms both, for older Safari */
+  function decodeOne(ab, ok, bad) {
+    var done = false;
+    function y(buf) { if (done) return; done = true; if (buf) ok(buf); else bad(); }
+    function n() { if (done) return; done = true; bad(); }
+    try {
+      var p = ctx.decodeAudioData(ab, y, n);
+      if (p && typeof p.then === 'function') p.then(y, n);
+    } catch (e) { n(); }
+  }
+  /* MP3 decoders disagree about the encoder's priming delay: some trim it,
+     some hand back ~25 ms of silence first. A shot that starts 25 ms after the
+     click reads as input lag, so the lead-in is measured rather than trusted:
+     everything up to 1.5 ms before the first sample above -54 dBFS goes. */
+  function trimLead(buf) {
+    var d = buf.getChannelData(0), n = d.length, i = 0;
+    while (i < n && d[i] < 0.002 && d[i] > -0.002) i++;
+    if (i >= n) return null;
+    var cut = i - Math.round(0.0015 * buf.sampleRate);
+    if (cut < 16) return buf;
+    var out = ctx.createBuffer(buf.numberOfChannels, n - cut, buf.sampleRate);
+    for (var c = 0; c < buf.numberOfChannels; c++) out.getChannelData(c).set(buf.getChannelData(c).subarray(cut));
+    return out;
+  }
+  /* where the loudest instant is - the clack, for the pump clips */
+  function peakAt(buf) {
+    var d = buf.getChannelData(0), best = 0, at = 0;
+    for (var i = 0; i < d.length; i++) { var v = d[i] < 0 ? -d[i] : d[i]; if (v > best) { best = v; at = i; } }
+    return at / buf.sampleRate;
+  }
+  function recDecode() {
+    if (REC.state !== 'loaded' || !ctx || dead) return;
+    var src = global.NZ_GUNSHOTS && global.NZ_GUNSHOTS.clips;
+    if (!src) { REC.state = 'failed'; return; }
+    REC.state = 'decoding';
+    var jobs = [], k, i;
+    for (k in src) if (src.hasOwnProperty(k) && src[k] && src[k].length)
+      for (i = 0; i < src[k].length; i++) jobs.push([k, src[k][i]]);
+    /* Six decodes in flight at a time. The decoding itself happens off the
+       main thread; what lands on it is one short callback per clip (copy out
+       of base64, trim, file it), each its own task, so a frame is never held
+       up by more than one clip's worth of work. Six-wide rather than one at a
+       time because each callback waits for a free slot between frames, and on
+       a phone that is struggling for frame rate thirty slots in a row would
+       keep the recordings from arriving for a second or more. */
+    var j = 0, left = jobs.length, t0 = nowMs();
+    function finish() {
+      REC.ms = Math.round(nowMs() - t0);
+      REC.state = (REC.bufs.pistol_near || REC.bufs.rifle_near || REC.bufs.shotgun_near) ? 'ready' : 'failed';
+      try { delete global.NZ_GUNSHOTS; } catch (e) { global.NZ_GUNSHOTS = undefined; }
+      NZ.log('gunshot recordings ' + REC.state + ': ' + REC.clips + '/' + jobs.length + ' clips, ' + REC.ms + ' ms');
+    }
+    function done() { if (--left === 0 && !dead) finish(); else next(); }
+    function next() {
+      if (dead || j >= jobs.length) return;
+      var job = jobs[j++], ab = null;
+      try { ab = b64buf(job[1]); } catch (e) { ab = null; }
+      if (!ab) { global.setTimeout(done, 0); return; }
+      decodeOne(ab, function (buf) {
+        try {
+          buf = trimLead(buf);
+          if (buf) {
+            (REC.bufs[job[0]] = REC.bufs[job[0]] || []).push({ buf: buf, hit: job[0].indexOf('pump') === 0 ? peakAt(buf) : 0 });
+            REC.clips++;
+          }
+        } catch (e) {}
+        done();
+      }, done);
+    }
+    if (!left) { finish(); return; }
+    for (var w = 0; w < 6; w++) next();
+  }
+  /* Ask for the clips once the page has finished loading - never before. */
+  try {
+    if (global.document && global.document.readyState === 'complete') global.setTimeout(recFetch, 800);
+    else if (global.addEventListener) global.addEventListener('load', function () { global.setTimeout(recFetch, 800); });
+  } catch (e) {}
+
+  /* still worth rendering the synthesised blast banks at startup? */
+  function recWanted() { return REC.on && REC.state !== 'failed'; }
+  function recReady(w) {
+    if (!REC.on) return false;
+    if (REC.state !== 'ready') { if (REC.state === 'idle') recFetch(); return false; }
+    var l = REC.bufs[w + '_near'];
+    if (!l || !l.length) return false;
+    return w !== 'shotgun' || !!(REC.bufs.pump_back && REC.bufs.pump_fwd);
+  }
+
+  /* One recorded report: near and far sets crossfaded by distance, the same
+     split blast() makes. ~+-half a semitone of playback-rate scatter on top of
+     variant rotation (never the same clip twice running); `jit` narrows it
+     for full-auto, where a wandering pitch reads as a broken sampler. */
+  function recShot(b, w, o) {
+    var t = fin(o.t, 0), rec, lst;
+    var rate = 1 + rr(-0.028, 0.030) * fin(o.jit, 1);
+    /* Someone else's shot in a busy fight: the clip's own tail (the range's
+       echo, out to 1.6 s on the far set) is masked by everything else, but
+       it is what keeps that shot's spatial chain - panner, filters - alive
+       on the audio thread. So past ~30% of the voice pool it holds full
+       level and then fades out early, and the chain is released about twice
+       as soon. A lone distant shot still rolls out in full; your own gun is
+       never cut. */
+    var busy = !b.firstPerson && live.length > CAP * 0.30;
+    if (b.near > 0.02) {
+      rec = pickBuf(REC.bufs[w + '_near'], 'rc_' + w + '_n');
+      /* A microphone a few metres off the muzzle hears the blast; the man
+         holding the gun also FEELS it. Real recordings carry their energy at
+         250 Hz-2 kHz with the bottom octaves 15-25 dB down, which reads thin
+         against a synthesised boom, so the shooter's own report gets a few
+         dB of shelf below ~140 Hz. Built from the recording itself - no
+         sine thump - and nobody else gets it. */
+      if (rec) smp(b, { t: t, buf: rec.buf, vol: cl(o.near * b.near, 0, 3), rate: rate,
+                        peak: o.peak, peakg: o.peakg, peakq: o.peakq,
+                        ls: b.firstPerson ? 140 : undefined, lsg: fin(o.lsg, 4),
+                        cut: busy ? 0.45 : undefined, pri: 6 });
+    }
+    /* pri 4: below a near report, still above footsteps (1-3) */
+    if (b.far > 0.02) {
+      lst = REC.bufs[w + '_far'] || REC.bufs[w + '_near'];
+      rec = pickBuf(lst, 'rc_' + w + '_f');
+      if (rec) smp(b, { t: t, buf: rec.buf, vol: cl(o.far * b.far, 0, 3), rate: rate * rr(0.985, 1.015),
+                        cut: busy ? 0.7 : undefined, pri: 4 });
+    }
+  }
+
+  function recPistol(x, z) {
+    var b = newBus(x, z, { cat: 'weapon', wet: 0.85, pan: 0.14, shot: true });
+    var self = b.firstPerson, jv = rr(-0.10, 0.08);
+    pistolSeq++;
+    pistolLast = ctx.currentTime;
+    /* the faint transonic edge for anyone downrange, exactly as synthesised */
+    if (!self)
+      ballistic(b, 0.17 * cl(1 - b.dm / 45, 0, 1) * (1 + jv), false,
+                { rate: rr(0.52, 0.74), hp: 260 });
+    recShot(b, 'pistol', {
+      near: REC_GAIN.pistol * (self ? 1 : REC_OBS.pistol) * (1 + jv),
+      far: REC_GAIN.pistolFar * (1 + jv), jit: 1
+    });
+    if (self && !b.ownShot) duck(0.36, 0.16);
+    return true;
+  }
+
+  function recRifle(x, z) {
+    var b = newBus(x, z, { cat: 'weapon', wet: 0.8, pan: 0.12, shot: true });
+    var self = b.firstPerson;
+    var n = rifleSeq++, alt = (n & 1) ? 1 : 0, jv = rr(-0.09, 0.08);
+    rifleLast = ctx.currentTime;
+    /* The recordings were made beside the gun, so they hold no ballistic
+       crack; a 5.56 fired AT you does crack, so observers keep the
+       synthesised N-wave, unchanged. */
+    if (!self)
+      ballistic(b, 0.62 * cl(1 - b.dm / 110, 0.20, 1) * (1 + jv), false, {
+        rate: rr(1.04, 1.26) * cl(1 - b.dm / 300, 0.72, 1),
+        hp: 420,
+        peak: (alt ? 4300 : 3050) * rr(0.82, 1.24),
+        peakg: (alt ? 3.4 : 1.5) + rr(-2.2, 2.2),
+        peakq: rr(0.8, 2.4)
+      });
+    /* Four near clips at 9.5 rps: a gentle low-mid bump that flips between
+       open and scooped on alternate rounds keeps a burst from settling into
+       one fixed colour (the same trick the synthesised rifle uses). */
+    recShot(b, 'rifle', {
+      near: REC_GAIN.rifle * (self ? 1 : REC_OBS.rifle) * (1 + jv),
+      far: REC_GAIN.rifleFar * (1 + jv), jit: 0.6,
+      peak: (alt ? 640 : 440) * rr(0.85, 1.2), peakg: (alt ? 1.6 : -1.6) + rr(-0.8, 0.8), peakq: rr(0.8, 1.8)
+    });
+    if (self && !b.ownShot) duck(0.26, 0.115);
+    return true;
+  }
+
+  function recShotgun(x, z) {
+    var b = newBus(x, z, { cat: 'weapon', wet: 1.0, pan: 0.16, shot: true });
+    var self = b.firstPerson, nearGate = self || b.dist < 30, jv = rr(-0.08, 0.07);
+    /* buckshot is subsonic: no crack, all blast */
+    recShot(b, 'shotgun', {
+      near: REC_GAIN.shotgun * (self ? 1 : REC_OBS.shotgun) * (1 + jv),
+      far: REC_GAIN.shotgunFar * (1 + jv), jit: 0.8, lsg: 6
+    });
+    /* The pump. The viewmodel and the shell ejection put the fore-end at the
+       back of its stroke at ~.28 s and home again at ~.47 s - the instants
+       the synthesised pump hit - so each clip is started early enough that
+       its loudest clack lands there. */
+    if (nearGate) {
+      var pb = pickBuf(REC.bufs.pump_back, 'rc_pb'), pf = pickBuf(REC.bufs.pump_fwd, 'rc_pf');
+      var pv = REC_GAIN.pump * (self ? 1 : 0.8);
+      var r1 = rr(0.97, 1.03), r2 = rr(0.97, 1.03);
+      if (pb) smp(b, { t: Math.max(0, 0.277 + rr(-0.008, 0.008) - pb.hit / r1), buf: pb.buf, vol: pv, rate: r1, pri: 3 });
+      if (pf) smp(b, { t: Math.max(0, 0.473 + rr(-0.010, 0.010) - pf.hit / r2), buf: pf.buf, vol: pv * 1.05, rate: r2, pri: 3 });
+    }
+    if (self && !b.ownShot) duck(0.46, 0.24);
+    return true;
+  }
+
   /* ------------------------------------------------------------ 9x19 pistol
      Rebuilt around the shooter's position. The short version of what changed:
      the crack is gone, the slide is three times faster, the bass came down,
@@ -2346,6 +2638,7 @@
      and it is the one people actually recognise as "a pistol".
      -------------------------------------------------------------------- */
   function cuePistol(x, z) {
+    if (recReady('pistol')) return recPistol(x, z);
     var b = newBus(x, z, { cat: 'weapon', wet: 0.95, pan: 0.14, shot: true });
     var self = b.firstPerson, ss = subScale(b);
     var nearGate = self || b.dist < 26;
@@ -2469,6 +2762,7 @@
   }
 
   function cueShotgun(x, z) {
+    if (recReady('shotgun')) return recShotgun(x, z);
     var b = newBus(x, z, { cat: 'weapon', wet: 1.15, pan: 0.16, shot: true });
     var self = b.firstPerson, ss = subScale(b);
     var nearGate = self || b.dist < 30;
@@ -2588,6 +2882,9 @@
                    semi-mechanical rather than heavy.
      -------------------------------------------------------------------- */
   function cueRifle(x, z, supp) {
+    /* the suppressed rifle stays synthesised: there is no suppressed take in
+       the library, and faking one from the open recording would be worse */
+    if (supp !== true && recReady('rifle')) return recRifle(x, z);
     var b = newBus(x, z, { cat: 'weapon', wet: supp ? 0.5 : 0.9, pan: 0.12, shot: true });
     var self = b.firstPerson, ss = subScale(b);
     var nearGate = self || b.dist < 28;
@@ -4131,17 +4428,21 @@
   /* Prime the banks the first second of play will certainly need, one per
      tick so a 20 ms generation never lands inside a frame that matters. */
   function primeBanks() {
+    /* The pistol and rifle blast banks are only primed when the recordings
+       are NOT coming (section 15c): with them they would never be played.
+       Should the recordings fail after this point, the banks still build
+       lazily on first use, exactly as every other bank always has. */
     var q = [
       function () { crackBank(false); },
-      function () { blastBank('pistol', false); },
+      function () { if (!recWanted()) blastBank('pistol', false); },
       function () { footBank(world() ? surfaceAt(world().player.x, world().player.z) : 'concrete'); },
       function () { pingBank('pg_mech', 1550, 0.20, false); },
       /* The rifle is full-auto: the first burst is the worst possible moment
          to be generating a bank one variant at a time, because rounds 2-5
          would all draw the single synchronous variant and the burst would
          open with four identical shots. */
-      function () { blastBank('rifle', false); },
-      function () { blastBank('pistol', true); },
+      function () { if (!recWanted()) blastBank('rifle', false); },
+      function () { if (!recWanted()) blastBank('pistol', true); },
       function () { footBank('concrete'); },
       function () { pingBank('pg_case', 3200, 0.10, true); },
       function () { crackBank(true); }
@@ -4180,6 +4481,9 @@
     global.requestAnimationFrame(tick_);
     try { classify(); } catch (e) {}
     updateBed();
+    /* recordings: start the download if the page-load timer has not yet,
+       or decode them now if they arrived before there was a context */
+    try { recFetch(); recDecode(); } catch (e) {}
     primeBanks();
     NZ.flags.audio = true;
     NZ.log('audio module installed (sr=' + SR + ', tier=' + TIER + ', cap=' + CAP + ')');
@@ -4243,6 +4547,7 @@
            tails and mech detail); p3+ appearing in quantity means footsteps
            and enemy voices are being cut and something is over-spending. */
         steals: steals, stolenPri: stolenPri, denied: deniedVoices,
+        recordings: { on: REC.on, state: REC.state, clips: REC.clips, decodeMs: REC.ms },
         pools: { gain: pool.g.length, biquad: pool.bq.length, panner: pool.pn.length, delay: pool.dl.length },
         irs: irRT, banks: genCost, chainSpin: +chain.spin.toFixed(2)
       };
@@ -4266,6 +4571,14 @@
       return TIER;
     },
     disable: function () { panic('manual disable'); },
+    /* Recorded pistol / rifle / shotgun on (default) or off. Off falls back to
+       the synthesis, which stays fully intact - handy for an A/B listen. */
+    recordings: function (on) {
+      if (on === undefined) return REC.on;
+      REC.on = !!on;
+      if (REC.on && REC.state === 'idle') recFetch();
+      return REC.on;
+    },
 
     /* ---- offline analysis hook ----
        Forces every generator to run and hands back the raw buffers so a test

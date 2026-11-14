@@ -83,6 +83,13 @@ const MODULES = [
   "nz-net.js",
 ];
 
+/* Files a module loads ITSELF at runtime, so no <script> tag names them and
+   the tag check at the bottom cannot see them.  nz-audio.js requests
+   nz-gunshots-asset.js (the recorded pistol, rifle and shotgun) once the page
+   has loaded; without it the guns play their synthesised sound instead, so a
+   missing copy is a loud warning rather than a failed build. */
+const RUNTIME = ["nz-gunshots-asset.js"];
+
 /* PERSONAL files dress the local player.  nz-hero-look.js is the third-person
    figure's look, with a photograph of a real person in it.  It ships when it
    is in the folder -- the owner chose to put him on the live site
@@ -131,10 +138,13 @@ await writeFile(path.join(gameDir, "NUKEM.html"), outHtml);
 
 /* 3. the modules, next to the page that asks for them */
 const copied = [];
-for (const m of [...shipped, ...MODULES]) {
+for (const m of [...shipped, ...MODULES, ...RUNTIME]) {
   if (!(await exists(R(m)))) { console.warn(`build: missing module ${m} -- not copied`); continue; }
   await copyFile(R(m), path.join(gameDir, m));
   copied.push(m);
+}
+for (const m of RUNTIME) {
+  if (!copied.includes(m)) console.warn(`build: WARNING ${m} is not in this build -- its feature falls back (see RUNTIME above)`);
 }
 
 /* 4. vendor/ -- three.js is loaded from unpkg with a cdnjs fallback, but a
