@@ -2335,6 +2335,40 @@
     if (!ROAD.ready || !a) { d.v = damp(d.v, 0, .02, dt); publish(e, d, dt); return; }
     if (!d.settled) settle(e, d);
 
+    /* ---- 0. THE POST.  The cordon's car (NUKEM.html P4, {post: true}) starts
+       parked at the police-line end of 232 Sk south, nose to the roundabout,
+       crew buttoned up: it is not at the junction when the player gets
+       there.  It stays parked until the crew has a reason to move -- eyes on
+       him (aiSee clips a parked crew to post.sight), a hit on the hull, a
+       fresh fix on him within post.wake of the post, or post.patience
+       seconds of hearing a fight nobody called it to.  Then the post is
+       gone for good and this is an ordinary patrol car again: a hunt routes
+       anywhere, a patrol keeps to THE BEAT. ------------------------------ */
+    if (e.post && e.post.on) {
+      var P = e.post;
+      if (a.alert > .3) P.heat = (P.heat || 0) + dt;
+      /* a fix means something about the PLAYER: eyes, the radio, his gunfire
+         or his feet (kConf >= .45).  A friend's muzzle report (.2) is only
+         where the friend is -- the left wing's own riflemen fight forty
+         units in front of this bumper, and taking their position for his
+         sent the car to the junction a second after the first shot. */
+      var fix = (a.known && a.kAge < 14 && a.kConf >= .45) ? Math.hypot(a.kx - e.x, a.kz - e.z) : 1e9;
+      var hurt = typeof e.cfg.hp === 'number' && e.hp < e.cfg.hp - .5;
+      if (a.see || hurt || fix < (P.wake || 90) || (P.heat || 0) > (P.patience || 35)) {
+        P.on = false;
+        P.left = a.see ? 'seen' : hurt ? 'hit' : fix < (P.wake || 90) ? 'fix' : 'patience';
+        d.route = null; d.replanT = 0; d.gear = 1;
+        d.node = nearestNode(e.x, e.z, -1);
+        STATS.postLeft = P.left;
+      } else {
+        d.v = damp(d.v, 0, .02, dt);
+        d.steer = toward(d.steer, 0, V.LOCK_RATE * .45 * dt);
+        d.wantSpd = 0; d.pinT = 0;
+        publish(e, d, dt);
+        return;
+      }
+    }
+
     if (d.mode === 'kturn') { kturnTick(e, d, dt); return; }
 
     /* ---- recovery. No route: a driver who has put it into something winds

@@ -4593,8 +4593,10 @@ function buildStreetMap() {
     /* B-BLOK ground floor - its door is on the left wing */
     ['trooper', 148, 58], ['enforcer', 160, 57], ['pig', 176, 58], ['octa', 166, 63],
     /* 232 Sk south, the left wing: the park gate flank, the second balcony,
-       and the long arm down toward the police line */
-    ['trooper', 140, 58], ['enforcer', 141, 68], ['octa', 146, 72], ['pig', 155, 68],
+       and the long arm down toward the police line.  The enforcer that stood
+       on the carriageway at (141,68) steps off it to (136,67): the armoured
+       car is parked on that spot now (P4). */
+    ['trooper', 140, 58], ['enforcer', 136, 67], ['octa', 146, 72], ['pig', 155, 68],
     ['enforcer', 123, 60], ['trooper', 132, 74], ['octa', 131, 86]
   ];
   for (const e of E4) spawn(e[0], e[1], e[2]);
@@ -4604,12 +4606,17 @@ function buildStreetMap() {
      rifle lie within the first thirty metres; a campaign player who already
      owns them just collects the ammo. */
   const P4 = [
-    /* One armoured patrol.  It starts on the park road just west of the
-       roundabout and, until its crew has the player, patrols only the western
-       half of the road network -- the park, the roundabout and both 232 Sk
-       arms (nz-apc.js PATROL_EAST_X) -- so it never cruises down the canyon to
-       the spawn on its own.  Once it has him, a hunt routes anywhere. */
-    ['apc', 133, 41],
+    /* One armoured patrol, and it is NOT at the roundabout when the player
+       arrives.  It starts parked deep in the left wing, at the police-line
+       end of 232 Sk south (road node s3), nose to the junction and buttoned
+       up -- a POST (placeEntities, nz-apc.js THE POST).  Parked, the crew only
+       sees 76 units down its own arm, so the roundabout fight is not theirs.
+       It moves when the player comes down that arm, when the hull is hit,
+       when it gets a fresh fix on him within 90 units, or after 35 s of
+       hearing a fight it was not called to.  From then on it is the old
+       patrol: until its crew has the player it keeps to the western half of
+       the road network (PATROL_EAST_X), and a hunt routes anywhere. */
+    ['apc', 141, 70, { post: true }],
     /* ---- two SENTINELs, and they are outdoor enemies here.
 
        navBuild bakes a second walk grid for anything carrying
@@ -4627,12 +4634,17 @@ function buildStreetMap() {
        opposite direction: get inside and it cannot follow you. One holds the
        roundabout, where you first see it from the park crest coming down the
        slope; one holds the cordon itself, in front of the boom. */
-    /* one at the roundabout, one in front of the boom.  The second stood
+    /* one deep in the right wing, one in front of the boom.  The first used
+       to hold the roundabout itself, where at 132 units of sight it saw the
+       player coming up the canyon and opened the whole street at once; it
+       now holds the far, cemetery end of the 232 Sk north plaza (132,3) --
+       one of the few spider cells that has no line onto the roundabout --
+       so the player meets it when he goes for the red card.  The second stood
        mid-canyon at (176,44) while the canyon was the opening fight; the
-       canyon starts empty now, so it goes back to the job above -- holding the
-       cordon itself -- on the crest, where the checkpoint is, one cell north
-       of the armoured car's westbound lane. */
-    ['spider', 139, 47], ['spider', 77, 39],
+       canyon starts empty now, so it goes back to holding the cordon itself
+       -- on the crest, where the checkpoint is, one cell north of the
+       armoured car's westbound lane. */
+    ['spider', 132, 3], ['spider', 77, 39],
     /* the park crest and the split road */
     /* THE FIRST THIRTY METRES MOVED TO THE OTHER END OF THE STREET.  These
        five sat on the park crest because that is where the mission used to
@@ -4675,7 +4687,7 @@ function buildStreetMap() {
     ['atomic', 93, 23], ['rockets', 92, 24],
     ['medpack', 161, 72], ['atomic', 162, 72]
   ];
-  for (const p of P4) spawn(p[0], p[1], p[2]);
+  for (const p of P4) spawn(p[0], p[1], p[2], p[3]);
 
   /* Open at the park crest with the whole street falling away east: the
      roundabout at 140, the two Seydikent blocks past it, and the cordon
@@ -7748,6 +7760,9 @@ function aiSee(e) {
   const dx = player.x - e.x, dz = player.z - e.z;
   const d = Math.hypot(dx, dz);
   if (d > cfg.sight) return false;
+  /* a vehicle parked on a post (nz-apc.js, THE POST) is buttoned up: until
+     something rouses the crew it only sees down its own end of the street */
+  if (e.post && e.post.on && d > e.post.sight) return false;
   /* vision cone: 60 deg either side is full rate, out to 100 deg is
      peripheral and takes noticeably longer to resolve into a contact */
   const rel = Math.abs(Math.atan2(Math.sin(Math.atan2(dx, dz) - e.face), Math.cos(Math.atan2(dx, dz) - e.face)));
@@ -7782,26 +7797,90 @@ function aiNoise(x, z, radius, kind) {
     /* A friend firing tells you where the FIGHT is, not where the target is,
        so it is a low-confidence lead that a real sighting immediately beats. */
     const conf = kind === 'shot' ? .82 : friendly ? .2 : .5;
-    if (!friendly || !e.ai.known || e.ai.kAge > 7) {
-      const gx = x + rr(-err, err), gz = z + rr(-err, err);
-      aiKnow(e, gx, floorAt(Math.floor(gx / CELL), Math.floor(gz / CELL)), gz, conf, false);
-    }
     const raise = kind === 'shot' ? .85 : friendly ? .45 : .5;
-    /* The chain the player has to be able to hear: your footstep, his callout,
-       then his burst. Without the middle link the first thing you learn about
-       a man round the corner is the muzzle flash, and the reaction model can
-       be as generous as it likes - it will still feel like an ambush. He barks
-       when he goes from unaware to switched-on by sound alone, never when he
-       can already see you (aiAcquire owns that callout), and at most once
-       every few seconds so a firefight does not turn into a chorus. */
-    if (e.ai.alert < raise) {
-      if (e.ai.alert < .3 && raise >= .5 && !e.ai.see && e.ai.barkT <= 0) {
-        e.ai.barkT = rr(4.5, 9);
-        sfx(e.cfg.alert, e.x, e.z);
-        if (kind !== 'friendly') sfx('call_contact', e.x, e.z);
-      }
-      e.ai.alert = raise;
+    /* the cordon only: a man who is not already in the fight and is more than
+       ten metres from the noise reacts late (hearLag), so the street wakes in
+       waves instead of all at once -- see HEAR */
+    const lag = hearLag(e, d);
+    if (lag > 0) { hearLater(e, x, z, err * (1 + d / 60), conf, raise, kind, lag); continue; }
+    aiHeard(e, x, z, err, conf, raise, kind);
+  }
+}
+/* What hearing a noise does to one man: a lead on where it came from, and
+   the alert it raises.  aiNoise applies it at once; the cordon's HEAR queue
+   applies it later. */
+function aiHeard(e, x, z, err, conf, raise, kind) {
+  const friendly = kind === 'friendly';
+  if (!friendly || !e.ai.known || e.ai.kAge > 7) {
+    const gx = x + rr(-err, err), gz = z + rr(-err, err);
+    aiKnow(e, gx, floorAt(Math.floor(gx / CELL), Math.floor(gz / CELL)), gz, conf, false);
+  }
+  /* The chain the player has to be able to hear: your footstep, his callout,
+     then his burst. Without the middle link the first thing you learn about
+     a man round the corner is the muzzle flash, and the reaction model can
+     be as generous as it likes - it will still feel like an ambush. He barks
+     when he goes from unaware to switched-on by sound alone, never when he
+     can already see you (aiAcquire owns that callout), and at most once
+     every few seconds so a firefight does not turn into a chorus. */
+  if (e.ai.alert < raise) {
+    if (e.ai.alert < .3 && raise >= .5 && !e.ai.see && e.ai.barkT <= 0) {
+      e.ai.barkT = rr(4.5, 9);
+      sfx(e.cfg.alert, e.x, e.z);
+      if (kind !== 'friendly') sfx('call_contact', e.x, e.z);
     }
+    e.ai.alert = raise;
+  }
+}
+
+/* THE CORDON WAKES IN WAVES.  The street is open, so one rifle report used to
+   reach every man within 185 units with a clear line -- both 232 Sk plazas,
+   the park road and the canyon -- and every one of them got a 1-2 unit fix on
+   the player in the same frame.  Thirty-three of forty-one were switched on
+   within four seconds of first contact and all converged at once, which is
+   both the wrong fight and, on a phone or a slow PC, a frame-time cliff.
+
+   Mission 4 only.  A man who is not already in the fight (alert under .35, no
+   fresh fix) and is more than 36 units (ten metres) from the noise hears it
+   late: half a second of "was that us?", plus a second for every 34 units of
+   distance -- a man 100 units off reacts after about 2.5 s, one at 185 after
+   about 5 s.  His fix is vaguer with distance (aiNoise widens err), and the
+   whole street can only take three such wake-ups a second.  Men who can see
+   the player, are told on the radio, or are shot are untouched: eyes, radio
+   and pain stay instant. */
+const HEAR = { q: [], tokens: 3, rate: 3, burst: 3 };
+function hearLag(e, d) {
+  if (LEVEL !== 4 || d <= 36) return 0;
+  const a = e.ai;
+  if (a.alert >= .35 || a.see || (a.known && a.kAge < 8)) return 0;
+  return rr(.35, .8) + (d - 36) / 34;
+}
+function hearLater(e, x, z, err, conf, raise, kind, lag) {
+  const p = e._hear;
+  if (p && !p.done) {
+    /* already waiting on a noise: keep the earlier clock, take the louder
+       and newer report */
+    p.x = x; p.z = z; p.err = Math.min(p.err, err);
+    p.conf = Math.max(p.conf, conf); p.raise = Math.max(p.raise, raise);
+    if (kind !== 'friendly') p.kind = kind;
+    return;
+  }
+  const item = { e, x, z, err, conf, raise, kind, t: lag, done: false };
+  e._hear = item; HEAR.q.push(item);
+}
+function hearTick(dt) {
+  if (!HEAR.q.length) { HEAR.tokens = HEAR.burst; return; }
+  HEAR.tokens = Math.min(HEAR.burst, HEAR.tokens + dt * HEAR.rate);
+  for (let i = HEAR.q.length - 1; i >= 0; i--) {
+    const h = HEAR.q[i], e = h.e;
+    if (e.dead || !e.ai) { h.done = true; HEAR.q.splice(i, 1); continue; }
+    /* something else switched him on first: eyes, the radio, a round */
+    if (e.ai.alert >= .35 && e.ai.known && e.ai.kAge < 2) { h.done = true; HEAR.q.splice(i, 1); continue; }
+    h.t -= dt;
+    if (h.t > 0) continue;
+    if (HEAR.tokens < 1) { h.t = rr(.15, .35); continue; }
+    HEAR.tokens -= 1;
+    h.done = true; HEAR.q.splice(i, 1);
+    aiHeard(e, h.x, h.z, h.err, h.conf, h.raise, h.kind);
   }
 }
 /* the single write path for "where the enemy thinks you are" */
@@ -8758,7 +8837,8 @@ function enemyFire(e) {
   e.recoilT = .15; e.muzzlePulse = 1;
   e.atkT = .16; e.atkTotal = .16; e.fired = true; e.state = 'attack';
   sfx(w.snd, e.x, e.z);
-  sfx('enemy_weapon_mech', e.x, e.z);
+  /* the bolt and handling clack is a 12 m sound; the report above carries */
+  if (nearPlayer(e, 45)) sfx('enemy_weapon_mech', e.x, e.z);
   sparkAt(mx, my, mz, laser ? 1.16 : .9, 'spark');
   flashLight(w.flash, _aiHit.set(mx, my, mz), laser ? 0x55eaff : undefined);
   a.mag--;
@@ -8913,7 +8993,7 @@ function moveEnemyBody(e, dt, wantX, wantZ, driven) {
   const stamp = Math.floor(e.gait * 2);
   if (e.cfg.step && speed > 2.1 && stamp !== e.footStamp && e.state === 'chase') {
     e.footStamp = stamp; e.shadowKick = 1;
-    sfx(e.cfg.step, e.x, e.z);
+    if (footAudible(e)) sfx(e.cfg.step, e.x, e.z);
   }
   return speed;
 }
@@ -9663,9 +9743,29 @@ function aiLeanSide(e) {
   return best || 1;
 }
 
+/* An enemy footstep is a whole positional voice -- bus, occlusion ray,
+   filters, heel sample, thud and tone -- and nz-audio's pool holds 34 to 60
+   of them.  On the cordon thirty men run at once and nearly every step was
+   stolen the moment it was built (7,237 steals in a 16 s fight).  A step the
+   player could not hear is not built: past 80 units (22 m), or past the
+   second one in a frame. */
+const FOOT = { r2: 80 * 80, perFrame: 2, left: 2 };
+function nearPlayer(e, r) {
+  const dx = e.x - player.x, dz = e.z - player.z;
+  return dx * dx + dz * dz < r * r;
+}
+function footAudible(e) {
+  const dx = e.x - player.x, dz = e.z - player.z;
+  if (dx * dx + dz * dz > FOOT.r2 || FOOT.left <= 0) return false;
+  FOOT.left--;
+  return true;
+}
+
 function updateEnemies(dt) {
   if (!NAV.ready && typeof buildMap === 'function') { try { navBuild(); buildSquads(); } catch (err) { NAV.ready = false; } }
   AIB.los = AIB.LOS; AIB.field = AIB.FIELD; AIB.cover = AIB.COVER;
+  FOOT.left = FOOT.perFrame;
+  if (!inspectMode) hearTick(dt);
   shadowStrength(dt);                 /* how much grounding is nz-render doing? */
   navFieldAge(dt);
   /* cars move, so the cell heights they publish have to be current before
@@ -10176,10 +10276,31 @@ function makeNullstarMesh() {
     else ring.rotation.set(PI / 3, PI / 5, 0);
     group.add(ring); rings.push(ring); ringMats.push(mat);
   }
-  const light = new THREE.PointLight(0x58ddff, 1.6, 18, 2);
-  group.add(light);
+  /* Not a lamp of its own.  A lamp per field core changed the scene's light
+     count on every spawn and every collapse, and every change recompiles
+     every lit material (see muzzleLight in boot) -- two full recompiles per
+     shot.  The core only carries the brightness it wants; nullLightSync()
+     hands the one pre-built field lamp to the newest live core. */
+  const light = { intensity: 1.6 };
   scene.add(group);
   return { group, sprite, spriteMat, rings, ringMats, light };
+}
+
+/* the null field's only lamp: built at boot for every mission the weapon can
+   be carried into (2-4), parked dark, never removed */
+let nullFieldLight = null;
+function nullLightInit() {
+  if (nullFieldLight || LEVEL < 2 || !scene) return;
+  nullFieldLight = new THREE.PointLight(0x58ddff, 0, 18, 2);
+  nullFieldLight.name = 'null-field';
+  scene.add(nullFieldLight);
+}
+function nullLightSync() {
+  if (!nullFieldLight) return;
+  const n = nullstars.length ? nullstars[nullstars.length - 1] : null;
+  if (!n) { nullFieldLight.intensity = 0; return; }
+  nullFieldLight.position.copy(n.p);
+  nullFieldLight.intensity = Math.max(0, n.mesh.light.intensity || 0);
 }
 
 function freeNullstarMesh(v) {
@@ -10393,6 +10514,7 @@ function updateNullstars(dt) {
       if (n.fuse <= 0) { collapseNullstar(n, false); continue; }
     }
   }
+  nullLightSync();
 }
 /* ------------------------------------------------------------- grenades --
    A grenade is not a shot: it flies an arc, hits like a thrown rock, and
@@ -10909,6 +11031,11 @@ function skillKey(e) {
 
 function startGame() {
   audioInit();
+  /* nz-audio builds its engine (noise, wavetables, the bus graph, the first
+     room IR, the recorded gunshots) on the first cue it is asked for.  On the
+     cordon nothing makes a sound until the walk-in's first pickup, so that
+     half-second freeze landed mid-walk.  Build it on the click instead. */
+  if (window.NZ) NZ.call('audioWarm', AU);
   /* Entities are deployed before the title screen is interactive. Rebuild the
      tactical partition now that the player's final skill choice is known. */
   if (NAV.ready) buildSquads();
@@ -11413,7 +11540,15 @@ function placeEntities() {
       player.x = wx; player.z = wz; player.y = fy;
       player.yaw = Number.isFinite(s.yaw) ? s.yaw : 0;
       player.pitch = Number.isFinite(s.pitch) ? s.pitch : -.04;
-    } else if (ECFG[s.kind]) spawnEnemy(s.kind, s.x, s.y);
+    } else if (ECFG[s.kind]) {
+      spawnEnemy(s.kind, s.x, s.y);
+      /* a post: parked until roused (nz-apc.js, THE POST).  `sight` clips the
+         crew's eyes (aiSee), `wake` is how close a fix on the player has to
+         be to the post, `patience` how many seconds of hearing a fight it was
+         not called to before it goes anyway */
+      if (s.post) enemies[enemies.length - 1].post = Object.assign(
+        { on: true, sight: 76, wake: 90, patience: 35, heat: 0 }, typeof s.post === 'object' ? s.post : {});
+    }
     else if (PICKDEF[s.kind]) makePickup(s.kind, wx, wz, fy);
   }
   camera.position.set(player.x, player.y + EYE, player.z);
@@ -11555,6 +11690,19 @@ function boot() {
   ambient.name = 'ambient-fill'; skyFill.name = 'sky-fill';
   sunKey.name = 'warm-key'; coolRim.name = 'cool-rim';
   scene.add(ambient, skyFill, sunKey, sunKey.target, coolRim);
+  /* THE LIGHT COUNT IS PART OF EVERY SHADER.  three.js compiles the number of
+     point lights into each lit material's program, so a light that appears
+     mid-game recompiles every lit material in the scene on the next frame.
+     The muzzle flash used to be created by the first flashLight() call -- the
+     first enemy burst -- and on the cordon that is 36 programs at once
+     (measured: 55 -> 91 programs, one 29 s frame on SwiftShader), a multi-
+     second freeze exactly when the street opens fire.  It exists from boot
+     now, dark, and flashLight() only ever changes its brightness.  The null
+     field's lamp gets the same treatment (nullLightInit). */
+  muzzleLight = new THREE.PointLight(0xffd08a, 0, 44, 1.6);
+  muzzleLight.name = 'muzzle-flash';
+  scene.add(muzzleLight);
+  nullLightInit();
   ov = el('overlay'); ovc = ov.getContext('2d');
 
   /* Publish the renderer objects, then let any installed subsystem module take

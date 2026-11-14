@@ -4143,8 +4143,15 @@
       function () { blastBank('rifle', false); },
       function () { blastBank('pistol', true); },
       function () { footBank('concrete'); },
-      function () { pingBank('pg_case', 3200, 0.10, true); }
+      function () { pingBank('pg_case', 3200, 0.10, true); },
+      function () { crackBank(true); }
     ], i = 0;
+    /* every surface anybody can stand on, last: on the cordon the first man
+       to run across the park's grass or a shop's tiles used to generate that
+       surface's bank inside the frame he took the step, in the middle of the
+       opening fight.  One bank per tick, as above. */
+    for (var fk in FOOTSPEC) if (FOOTSPEC.hasOwnProperty(fk))
+      (function (k) { q.push(function () { footBank(k); }); })(fk);
     (function next() {
       if (dead || i >= q.length) return;
       try { q[i](); } catch (e) { NZ.log('bank prime failed', e); }
@@ -4195,6 +4202,15 @@
     G = null;
     installed = false;
   }
+
+  /* The game asks for this on the Start click (NUKEM.html startGame), so the
+     half-second ensure() costs -- noise, wavetables, the bus graph, the room
+     IR, the recordings -- is spent while the title screen goes away instead
+     of inside the first cue of play. */
+  NZ.on('audioWarm', function (AU) {
+    if (dead) return;
+    try { ensure(AU); } catch (err) { panic(err); }
+  });
 
   NZ.on('sfx', function (name, x, z, AU) {
     if (dead) return undefined;
