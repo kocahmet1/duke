@@ -2938,10 +2938,17 @@
     for (i = 0; i < G.CRATES.length; i++) {
       var c = G.CRATES[i];
       var R = regionAt(c[0], c[1]); if (!R) continue;
+      /* a module may seat a crate on drawn ground below its region floor
+         (nz-net.js: multiplayer cover on Mission 4's slope); stock crates
+         keep R.f */
+      var F0 = R.f;
+      if (typeof NZ.crateBase === 'function') {
+        try { var fb = NZ.crateBase(c[0], c[1]); if (typeof fb === 'number' && isFinite(fb)) F0 = fb; } catch (eB) { }
+      }
       var i0 = pile.idx.length, n0 = pile.n;
       CRATE_RANGES.push({ cx: c[0], cy: c[1], start: i0, end: 0, v0: n0, v1: 0 });
       var wx = c[0] * C + C / 2, wz = c[1] * C + C / 2;
-      pile.context(R.f, R.sky ? R.f + 200 : R.c, R.amb, SURF.crate.tile);
+      pile.context(F0, R.sky ? F0 + 200 : R.c, R.amb, SURF.crate.tile);
       /* the footprint and 3.4-unit height match the stock crate exactly, so
          the waist-high cover the level design relies on is unchanged */
       var hw = C * 0.46, hh = 1.70, bt = 0.075, s, t;
@@ -2954,24 +2961,24 @@
            merged geometry cannot be rotated per instance, so the silhouette
            variety has to come from the composition */
         var ox2 = (hash1(i * 7.7) - 0.5) * 0.34, oz2 = (hash1(i * 9.1) - 0.5) * 0.34;
-        boxC(pile, cxp, R.f + hh * 0.5, czp, hw, hh * 0.5, hw, 0.09, 1);
-        boxC(pile, cxp + ox2, R.f + hh * 1.5, czp + oz2, hw * 0.82, hh * 0.5, hw * 0.82, 0.09, 1);
-        boxC(pile, cxp, R.f + hh * 0.98, czp, hw + bt * .5, 0.09, hw + bt * .5, 0.03, 0.92);
+        boxC(pile, cxp, F0 + hh * 0.5, czp, hw, hh * 0.5, hw, 0.09, 1);
+        boxC(pile, cxp + ox2, F0 + hh * 1.5, czp + oz2, hw * 0.82, hh * 0.5, hw * 0.82, 0.09, 1);
+        boxC(pile, cxp, F0 + hh * 0.98, czp, hw + bt * .5, 0.09, hw + bt * .5, 0.03, 0.92);
         for (s = -1; s <= 1; s += 2) for (t = -1; t <= 1; t += 2) {
-          boxC(pile, cxp + s * hw, R.f + hh * 0.5, czp + t * hw, bt, hh * 0.48, bt, 0.03, 0.9);
+          boxC(pile, cxp + s * hw, F0 + hh * 0.5, czp + t * hw, bt, hh * 0.48, bt, 0.03, 0.9);
         }
       } else {
-        boxC(pile, cxp, R.f + hh, czp, hw, hh, hw, 0.10, 1);
+        boxC(pile, cxp, F0 + hh, czp, hw, hh, hw, 0.10, 1);
         /* corner banding: real crates have edge protection, and the extra
            silhouette break is what stops them reading as grey cubes */
-        boxC(pile, cxp, R.f + hh * 0.32, czp, hw + bt * .5, 0.10, hw + bt * .5, 0.03, 0.94);
-        boxC(pile, cxp, R.f + hh * 1.68, czp, hw + bt * .5, 0.10, hw + bt * .5, 0.03, 0.94);
+        boxC(pile, cxp, F0 + hh * 0.32, czp, hw + bt * .5, 0.10, hw + bt * .5, 0.03, 0.94);
+        boxC(pile, cxp, F0 + hh * 1.68, czp, hw + bt * .5, 0.10, hw + bt * .5, 0.03, 0.94);
         for (s = -1; s <= 1; s += 2) for (t = -1; t <= 1; t += 2) {
-          boxC(pile, cxp + s * hw, R.f + hh, czp + t * hw, bt, hh * 0.98, bt, 0.03, 0.92);
+          boxC(pile, cxp + s * hw, F0 + hh, czp + t * hw, bt, hh * 0.98, bt, 0.03, 0.92);
         }
         if (variant === 2) {
           /* a smaller case tipped on top, breaking the flat lid */
-          boxC(pile, cxp + 0.30, R.f + hh * 2 + 0.42, czp - 0.22, hw * 0.46, 0.42, hw * 0.52, 0.06, 1);
+          boxC(pile, cxp + 0.30, F0 + hh * 2 + 0.42, czp - 0.22, hw * 0.46, 0.42, hw * 0.52, 0.06, 1);
         }
       }
       var rng = CRATE_RANGES[CRATE_RANGES.length - 1];

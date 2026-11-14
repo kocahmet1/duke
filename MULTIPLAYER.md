@@ -9,14 +9,24 @@ introduces them, so it adds no lag, and restarting it doesn't end a match.
 Clicking **ÇOK OYUNCULU** (multiplayer) asks which one:
 
 - **ER MEYDANI**: Mission 2 (The Crucible), the whole map.
-- **ABLUKA**: a fenced-off corner of Mission 4. It's the roundabout where
-  232. Sokak meets 233. Sokak, with GÜVEN ECZANESİ on the corner, about 16 m
-  of each arm of 232 Sk, the mouth of 233 Sk between A-BLOK and B-BLOK, the
-  foot of the park slope (it climbs 2 m to the west) and the ground-floor
-  room of each block that opens onto the junction. It's about 54 × 47 m and
-  fenced with the same red-and-white police bariyer the mission uses.
-  Nobody can walk past the fence, players or bots, but bullets fly over it.
-  It has 17 spawn points.
+- **ABLUKA**: a fenced-off part of Mission 4 around the roundabout where
+  232. Sokak meets 233. Sokak, with GÜVEN ECZANESİ on the corner:
+  - 232 Sk north to the mission's own police line, and south to a bariyer
+    past the spot where the armoured car waits in single player;
+  - 233 Sk east past the parked car and the 230 Sk crossing to the
+    mission's police line, and west up the slope (it climbs 5 m) to a
+    bariyer in front of the hilltop checkpoint;
+  - the ground floors of A-BLOK and B-BLOK (the rooms and the corridor
+    behind them, with doors onto both streets) and the SEYDIKENT C-BLOK
+    hall at the top of the slope.
+
+  It's about 160 × 100 m end to end, three times the floor of the first
+  version, with 40 spawn points. The open stretches of street have the
+  mission's plywood crates as cover, in pairs (34 crates). Like every crate
+  they break, the same way on every screen, and stay broken until the room
+  closes. Where the mission has no closure of its own, the edge is the same
+  red-and-white police bariyer the mission uses. Nobody can walk past it,
+  players or bots, but bullets fly over it.
 
 The lobby shows the map. While you're alone in the room and not yet
 playing, **DEĞİŞTİR** (change) switches it. Like the mode switch, that
@@ -208,6 +218,15 @@ the team match is 2v2.
     merged like the mission's own police lines, so no extra draw calls.
   - Only doors inside the arena open, and only spawn points inside it are
     used.
+  - A long line stands as sections of about 22 u, each with its own
+    chevron board, the way the mission's own police lines are pieced.
+  - The cover crates are listed in `MAPS[].cover`. They're added to the
+    level's crate list before the level builds its crates, so the merged
+    crate pile (`nz-env.js`), breaking (`nz-destruct.js`), the damage
+    snapshot and the bots' walls all treat them as stock crates. On the
+    slope the street is drawn on a smooth grade up to half a unit under the
+    stepped floor you walk on, so `NZ.crateBase` (read by `nz-env.js`) sets
+    those crates down on the grade instead of in the air.
 - The resolution step-down uses `NZ.render.setScale()` (in `nz-render.js`)
   for the 3D scene and the page's pixel ratio for the rest.
 - Without `#mp=` in the address, `nz-net.js` only adds the ÇOK OYUNCULU
@@ -260,6 +279,11 @@ Both need Chrome; point `CHROME=` at it if it isn't found.
   phone.
 - On ABLUKA you can walk through GÜVEN ECZANESİ's shop windows. The
   mission's map has no wall there; it's the same in single player.
+- The trees on 233 Sk's median, up the slope, are scenery: you walk through
+  them and they don't stop bullets (same in single player). The crates,
+  the planters and the parked car are the cover.
+- A crate shot apart stays gone for the rest of the room's life; new rounds
+  don't rebuild it.
 
 ## Files
 
@@ -288,3 +312,15 @@ ABLUKA, synced destruction and the frame-rate step-down changed:
 - `MULTIPLAYER.md`.
 
 Their originals are in `.backup-cordon-mp/`.
+
+The bigger ABLUKA (every street pushed back, the block ground floors, the
+cover crates) changed:
+- `nz-net.js`: the arena's rectangles, `cover` and the crates it adds,
+  long fence lines in sections, `NET.map().cover`, the lobby note.
+- `nz-env.js`: `NZ.crateBase`, an opt-in base height for a crate (single
+  player never sets it).
+- `scripts/team-smoke.mjs`: the test's shooting spot no longer gives up when
+  the target's team-mate stands beside it.
+- `MULTIPLAYER.md`.
+
+Their originals are in `.backup-abluka-v2/`.

@@ -148,7 +148,9 @@ function helpers(page) {
       return Math.hypot(ax + dx * t - px, az + dz * t - pz);
     };
     /* a spot on the same floor as (x, y, z), dmin..dmax away, from which the
-       player's eye has a clear line to (tx, ty, tz) that passes nobody in `avoid` */
+       player's eye has a clear line to (tx, ty, tz) that passes nobody in
+       `avoid`: 1.6 u is a figure's widest capsule (0.63) with room to spare,
+       so a team-mate standing beside the target does not rule out every spot */
     T.spotNear = (x, y, z, tx, ty, tz, dmin, dmax, avoid) => {
       for (let d = dmin; d <= dmax; d += 1.5) for (let k = 0; k < 24; k++) {
         const a = k / 24 * Math.PI * 2, px = x + Math.sin(a) * d, pz = z + Math.cos(a) * d;
@@ -156,7 +158,7 @@ function helpers(page) {
         const f = highestFloor(px, pz, PRAD * .85);
         if (Math.abs(f - y) > 0.6) continue;
         if (!shotLineClear(px, f + EYE - .25, pz, tx, ty, tz)) continue;
-        if (avoid && avoid.some(o => Math.abs(o.y - f) < 8 && T.segDist2(px, pz, tx, tz, o.x, o.z) < 3)) continue;
+        if (avoid && avoid.some(o => Math.abs(o.y - f) < 8 && T.segDist2(px, pz, tx, tz, o.x, o.z) < 1.6)) continue;
         return { x: px, y: f, z: pz };
       }
       return null;

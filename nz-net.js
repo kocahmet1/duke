@@ -62,9 +62,10 @@
 
    THE MAPS
      Mission 2 is played whole. Mission 4 is a whole city, so the match takes
-     one corner of it (MAPS below): the roundabout where 232 and 233 Sk meet,
-     GUVEN ECZANESI, a stretch of each arm, the foot of the park slope and
-     the junction rooms of A-BLOK and B-BLOK. canStand() refuses a step out
+     a fenced part of it (MAPS below): the roundabout where 232 and 233 Sk
+     meet, GUVEN ECZANESI, 232 Sk from the north gate to past the car post,
+     233 Sk from C-BLOK up the slope to the 230 Sk crossing, and the ground
+     floors of A-BLOK, B-BLOK and the C-BLOK hall. canStand() refuses a step out
      of it (players and bots alike), the bots' paths keep to it
      (NZ.bots.setAllow), the fence is the mission's own bariyer (stood by
      nz-street-side through its 'streetSideCordon' hook), only doors inside
@@ -167,17 +168,36 @@
   var MAPS = [
     { level: 2, name: 'ER MEYDANI', note: 'kapalı arena, bütün harita' },
     {
-      level: 4, name: 'ABLUKA', note: 'Seydişehir kavşağı, polis bariyeriyle çevrili',
+      level: 4, name: 'ABLUKA', note: 'Seydişehir: kavşak, dört sokak ve üç blok',
+      /* v2 (2026-11-14, "there is no way to hide"): every street pushed back
+         -- the north arm to the mission's own north gate, the canyon past
+         the parked car to the 230 Sk crossing, the south arm past the car
+         post, the uphill boulevard to C-BLOK -- and the ground floors of
+         A-BLOK, B-BLOK and the C-BLOK hall for cover. The upper floors
+         (lifts are parked in a match) and the park stay out. */
       rects: [
-        [121, 22, 144, 35],   /* 232 Sk north arm, to the junction          */
-        [116, 31, 120, 34],   /* GUVEN ECZANESI, the raised corner pharmacy  */
-        [112, 36, 144, 52],   /* the roundabout and the foot of the slope    */
-        [145, 35, 158, 51],   /* the mouth of 233 Sk between the two blocks  */
-        [121, 53, 144, 62],   /* 232 Sk south arm                            */
-        [145, 29, 151, 33],   /* A-BLOK's ground-floor room on the junction  */
-        [145, 55, 152, 60]    /* B-BLOK's ground-floor room on the junction  */
+        [121, 1, 144, 35],    /* 232 Sk north arm, to the mission's north gate  */
+        [116, 31, 120, 34],   /* GUVEN ECZANESI, the raised corner pharmacy     */
+        [78, 36, 144, 52],    /* the roundabout and 233 Sk up the slope to C-BLOK */
+        [68, 26, 95, 35],     /* SEYDIKENT C-BLOK's hall and its door (79,35)   */
+        [145, 35, 207, 51],   /* 233 Sk east, past the car and 230 Sk, to the
+                                 mission's own police line on col 208            */
+        [190, 29, 197, 34],   /* 230 Sk's north stub, closed by the police line */
+        [121, 53, 144, 88],   /* 232 Sk south arm, past the car post            */
+        [145, 19, 184, 33],   /* A-BLOK ground floor: rooms and the corridor    */
+        [145, 55, 184, 70]    /* B-BLOK ground floor: rooms and the corridor    */
       ],
       spawns: [[119, 33], [155, 43], [115, 49], [126, 45], [131, 56], [129, 27]],
+      /* Cover on the stretches that had none: the mission's own plywood
+         crates, in pairs, staggered side to side every six or seven cells.
+         They are stock crates in every way -- waist-high, breakable, broken
+         the same on every screen -- and keep doors, kerbs and spawns clear. */
+      cover: [
+        /* 232 Sk north */ [128, 4], [129, 4], [137, 8], [137, 9], [123, 12], [123, 13], [132, 15], [133, 15], [142, 17], [142, 18],
+        /* 232 Sk south */ [127, 66], [128, 66], [138, 72], [138, 73], [123, 76], [123, 77], [132, 80], [133, 80], [142, 84], [142, 85],
+        /* 233 Sk slope */ [82, 40], [82, 41], [88, 48], [89, 48], [95, 39], [96, 39], [102, 47], [102, 48], [108, 40], [109, 40],
+        /* 233 Sk east  */ [178, 43], [179, 43], [201, 41], [201, 42]
+      ],
       /* a 1.4 m retaining wall is fence enough: no bariyer on an edge whose
          outside stands this much higher */
       fenceRise: 2.5
@@ -405,6 +425,47 @@
     if (!AR) return true;
     return cx >= 0 && cy >= 0 && cx < MW && cy < MH && AR[cy * MW + cx] === 1;
   }
+  /* Cover crates (MAPS[].cover) join the level's crate list before the
+     level builds its crates, so everything that knows crates -- nz-env's
+     merged pile, nz-destruct's hit points, the damage snapshot, the bots'
+     walls -- takes them as stock. */
+  var COVER = {};
+  if (MAP.cover) wrap('makeCrates', function (orig) {
+    return function () {
+      try { addCover(); } catch (err) { netError(err, 'cover'); }
+      var r = orig.apply(this, arguments);
+      try { seatCover(); } catch (err) { netError(err, 'cover'); }
+      return r;
+    };
+  });
+  function addCover() {
+    for (var i = 0; i < MAP.cover.length; i++) {
+      var cx = MAP.cover[i][0] | 0, cy = MAP.cover[i][1] | 0;
+      if (cx < 0 || cy < 0 || cx >= MW || cy >= MH || grid[idx(cx, cy)] !== S_FLOOR || COVER[cx + ',' + cy]) continue;
+      grid[idx(cx, cy)] = S_BLOCK;
+      CRATES.push([cx, cy]);
+      COVER[cx + ',' + cy] = 1;
+    }
+  }
+  /* The slope is drawn on the park's smooth grade, up to half a unit under
+     the stepped floor the grid walks on; a crate there stands on the grade
+     at its downhill edge instead of in the air. */
+  function coverBase(cx, cy) {
+    if (!COVER[cx + ',' + cy]) return null;
+    var f = 0;
+    try { f = floorAt(cx, cy); } catch (e) { return null; }
+    if (!(f > 0.6) || !NZ.streetPark || typeof NZ.streetPark.gradeAt !== 'function') return null;
+    var g = NZ.streetPark.gradeAt(cx * CELL + CELL * 0.96);
+    return isFinite(g) && g < f && g > f - 1 ? g : null;
+  }
+  function seatCover() {
+    for (var i = 0; i < CRATE_MESHES.length; i++) {
+      var c = CRATE_MESHES[i], b = coverBase(c.cx, c.cy);
+      if (b !== null && c.mesh) c.mesh.position.y = b + CRATE_H * 0.5;
+    }
+  }
+  if (MAP.cover) NZ.crateBase = coverBase;
+
   if (MAP.rects) wrap('canStand', function (orig) {
     return function (x, z, rad) {
       if (AR) {
@@ -592,6 +653,19 @@
           var into = q > 0 ? pieces[q - 1] : pieces[q + 1];
           into.a = Math.min(into.a, P.a); into.b = Math.max(into.b, P.b);
           pieces.splice(q, 1); q--;
+        }
+        /* a long flat line (across a street end) stands as sections of
+           about 22 u, each with its own board and posts, the way the
+           mission's own police lines are pieced; one panel over 26 u also
+           loses its contact shadow to the occluder budget */
+        for (q = 0; q < pieces.length; q++) {
+          P = pieces[q];
+          var len = P.b - P.a, parts = len > 24 ? Math.ceil(len / 22) : 1;
+          if (parts < 2) continue;
+          var cut = [], step = len / parts;
+          for (var m = 0; m < parts; m++) cut.push({ a: P.a + step * m, b: P.a + step * (m + 1), lo: P.lo, hi: P.hi });
+          pieces.splice.apply(pieces, [q, 1].concat(cut));
+          q += parts - 1;
         }
         emit(E, pieces, g);
         j = k + 1;
@@ -2570,7 +2644,7 @@
         'Arkadaşını çağırmak için aşağıdaki bağlantıyı gönder: tıklaması yeterli.'
         : 'Ölüm maçı, en fazla ' + ROOM_MAX + ' oyuncu. Aşağıdaki bağlantıyı bir arkadaşına gönder: tıklaması yeterli, maça girer.<br>' +
         'Düşman yok, toplanacak eşya yok &mdash; herkes aynı silahlarla başlar ve öldükten 3 saniye sonra yeniden doğar.';
-      if (MAP.rects) brief.innerHTML += ' Maç, polis bariyerleriyle çevrili kavşakta geçer.';
+      if (MAP.rects) brief.innerHTML += ' Maç, polis bariyerleriyle çevrili kavşak ve sokaklarda geçer; A, B ve C bloklarının giriş katlarına girilebilir.';
     }
     var link = $('nzLink'); if (link) link.value = inviteUrl();
     var tr = $('nzTeamRow'); if (tr) tr.style.display = team ? '' : 'none';
@@ -2805,7 +2879,10 @@
     return out;
   };
   NET.spawnPoints = function () { return SPAWN_PTS.slice(); };
-  NET.map = function () { return { level: MAP.level, name: MAP.name, fenced: !!AR }; };
+  NET.map = function () {
+    return { level: MAP.level, name: MAP.name, fenced: !!AR,
+             cover: Object.keys(COVER).map(function (k) { return k.split(',').map(Number); }) };
+  };
   NET.arena = function () {
     var n = 0;
     if (AR) for (var i = 0; i < AR.length; i++) n += AR[i];
